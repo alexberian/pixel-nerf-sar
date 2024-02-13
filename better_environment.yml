@@ -1,0 +1,26 @@
+# run: conda env create -f environment.yml
+name: pn
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - python>=3.8
+  - pip
+  - pip:
+      - pyhocon==0.3.55
+      - opencv-python
+      - dotmap
+      - tensorboard
+      - imageio
+      - imageio-ffmpeg
+      - ipdb
+      - pretrainedmodels
+      - lpips
+      - torch-summary
+  - scipy
+  - numpy
+  - matplotlib
+  - pytorch
+  - torchvision==0.7.0
+  - scikit-image==0.17.2
+  - tqdm

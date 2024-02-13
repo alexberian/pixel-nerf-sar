@@ -63,12 +63,16 @@ def extra_args(parser):
 args, conf = util.args.parse_args(extra_args)
 args.resume = True
 
+
+
 device = util.get_cuda(args.gpu_id[0])
+print("Device:", device)
 
 dset = get_split_dataset(
     args.dataset_format, args.datadir, want_split=args.split, training=False
 )
 
+# pick the object subfolder
 data = dset[args.subset]
 data_path = data["path"]
 print("Data instance loaded:", data_path)
@@ -83,25 +87,39 @@ if isinstance(focal, float):
     focal = torch.tensor(focal, dtype=torch.float32)
 focal = focal[None]
 
+print("Loaded", len(images), "images")
+
 c = data.get("c")
 if c is not None:
     c = c.to(device=device).unsqueeze(0)
 
 NV, _, H, W = images.shape
 
+print("Image size", H, W)
+
 if args.scale != 1.0:
+    print("debug")
     Ht = int(H * args.scale)
+    print("debug")
     Wt = int(W * args.scale)
+    print("debug")
     if abs(Ht / args.scale - H) > 1e-10 or abs(Wt / args.scale - W) > 1e-10:
+        print("debug")
         warnings.warn(
             "Inexact scaling, please check {} times ({}, {}) is integral".format(
                 args.scale, H, W
             )
         )
+        print("debug")
     H, W = Ht, Wt
+    print("debug")
+
+print("Scaled image size", H, W)
 
 net = make_model(conf["model"]).to(device=device)
 net.load_weights(args)
+
+print("Loaded model")
 
 renderer = NeRFRenderer.from_conf(
     conf["renderer"], lindisp=dset.lindisp, eval_batch_size=args.ray_batch_size,
@@ -220,8 +238,6 @@ with torch.no_grad():
     # rgb_fine (V*H*W, 3)
 
     frames = rgb_fine.view(-1, H, W, 3)
-
-print('Frames shape:', frames.shape)
 
 print("Writing video")
 vid_name = "{:04}".format(args.subset)
