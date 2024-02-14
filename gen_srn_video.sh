@@ -4,8 +4,11 @@
 # dataset_dir="/mnt/c/Users/Berian/Documents/Arizona/research/Mahalanobis/genvs/shapenet/cars"
 dataset_dir="/home/berian/Documents/shapenet/cars"
 
-# for video generation
-python eval/gen_video.py -n srn_car --gpu_id 0 --split test -P '64 104' -D $dataset_dir -S 20
+# # for video generation
+# python eval/gen_video.py -n srn_car --gpu_id 0 --split test -P '64 104' -D $dataset_dir -S 20
+
+# for fourier video generation
+python eval/gen_fourier_video.py -n srn_car --gpu_id 0 --split test -P '64 104' -D $dataset_dir -S 20
 
 # # for my script
 # python eval/gen_srn_predictions.py -n srn_car --gpu_id 0 --split test -P '64 104' -D $dataset_dir -S 1

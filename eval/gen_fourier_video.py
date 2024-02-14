@@ -1,5 +1,7 @@
+
 import sys
 import os
+from fourier_features import fourier_features, post_process_image
 
 sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -103,6 +105,8 @@ if args.scale != 1.0:
 net = make_model(conf["model"]).to(device=device)
 net.load_weights(args)
 
+print('args.ray_batch_size:', args.ray_batch_size)
+args.ray_batch_size = 2048
 renderer = NeRFRenderer.from_conf(
     conf["renderer"], lindisp=dset.lindisp, eval_batch_size=args.ray_batch_size,
 ).to(device=device)
@@ -221,6 +225,16 @@ with torch.no_grad():
 
     frames = rgb_fine.view(-1, H, W, 3)
 
+# convert to fourier feature images
+print('Frames shape:', frames.shape)
+frames = fourier_features(frames, 16, dim=3) # (B, H, W, C)
+processed_frames = []
+for frame in frames:
+    frame = frame.permute(2, 0, 1) # (C, H, W)
+    frame = post_process_image(frame) # (H, W, C)
+    frame.shape = (1, *frame.shape) # (1, H, W, C)
+    processed_frames.append(frame)
+frames = np.concatenate(processed_frames, axis=0) # (B, H, W, C)
 
 print("Writing video")
 vid_name = "{:04}".format(args.subset)
@@ -229,13 +243,12 @@ if args.split == "test":
 elif args.split == "val":
     vid_name = "v" + vid_name
 vid_name += "_v" + "_".join(map(lambda x: "{:03}".format(x), source))
-vid_path = os.path.join(args.visual_path, args.name, "video" + vid_name + ".mp4")
+vid_path = os.path.join(args.visual_path, args.name, "video" + vid_name + ".gif")
+# vid_path = os.path.join(args.visual_path, args.name, "video" + vid_name + ".mp4")
 viewimg_path = os.path.join(
     args.visual_path, args.name, "video" + vid_name + "_view.jpg"
 )
-imageio.mimwrite(
-    vid_path, (frames.cpu().numpy() * 255).astype(np.uint8), fps=args.fps, quality=8
-)
+imageio.mimsave(vid_path, frames, duration=0.5,loop=0)
 
 img_np = (data["images"][src_view].permute(0, 2, 3, 1) * 0.5 + 0.5).numpy()
 img_np = (img_np * 255).astype(np.uint8)
