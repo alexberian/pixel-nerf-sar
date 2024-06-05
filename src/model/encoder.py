@@ -44,6 +44,8 @@ class SpatialEncoder(nn.Module):
         """
         super().__init__()
 
+        self.image_feature = None
+
         if norm_type != "batch":
             assert not pretrained
 
@@ -114,6 +116,8 @@ class SpatialEncoder(nn.Module):
         :param x image (B, C, H, W)
         :return latent (B, latent_size, H, W)
         """
+        image_feature = None
+
         if self.feature_scale != 1.0:
             x = F.interpolate(
                 x,
@@ -143,6 +147,7 @@ class SpatialEncoder(nn.Module):
             if self.num_layers > 3:
                 x = self.model.layer3(x)
                 latents.append(x)
+                self.image_feature = x
             if self.num_layers > 4:
                 x = self.model.layer4(x)
                 latents.append(x)
@@ -161,7 +166,7 @@ class SpatialEncoder(nn.Module):
         self.latent_scaling[0] = self.latent.shape[-1]
         self.latent_scaling[1] = self.latent.shape[-2]
         self.latent_scaling = self.latent_scaling / (self.latent_scaling - 1) * 2.0
-        return self.latent
+        return self.latent, self.image_feature
 
     @classmethod
     def from_conf(cls, conf):
