@@ -167,9 +167,9 @@ class ResnetFC(nn.Module):
                     #          reduce=combine_type,
                     #      )
                     #  else:
-                    x = util.combine_interleaved(
-                        x, combine_inner_dims, self.combine_type
-                    )
+
+                    # Combines the different processed views into a single tensor
+                    x = self.weighting_algorithm(x, combine_inner_dims)
 
                 if self.d_latent > 0 and blkid < self.combine_layer:
                     tz = self.lin_z[blkid](z)
@@ -182,6 +182,20 @@ class ResnetFC(nn.Module):
                 x = self.blocks[blkid](x)
             out = self.lin_out(self.activation(x))
             return out
+
+
+    def weighting_algorithm(self, x, combine_inner_dims):
+        """
+        :param x (..., d_hidden)
+        :param combine_inner_dims Combining dimensions for use with multiview inputs.
+        Tensor will be reshaped to (-1, combine_inner_dims, ...) and reduced using combine_type
+        on dim 1
+        """
+        if self.combine_type == "average" or self.combine_type == "max":
+            x = util.combine_interleaved(x, combine_inner_dims, self.combine_type)
+        else:
+            raise NotImplementedError("Unsupported combine type " + self.combine_type)
+        return x
 
     @classmethod
     def from_conf(cls, conf, d_in, **kwargs):

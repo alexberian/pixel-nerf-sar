@@ -1,0 +1,17 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            // python train/train.py -n srn_car_exp -c conf/exp/srn.conf -D /workspace/data/srncars/cars --gpu_id='7' --nviews='1 2 3'
+            "args": "-n srn_car_exp -c conf/exp/srn.conf -D /workspace/data/srncars/cars --gpu_id='7' --nviews='1 2 3'"
+        }
+    ]
+}
