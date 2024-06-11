@@ -134,6 +134,7 @@ class PixelNeRFTrainer(trainlib.Trainer):
 
         all_rgb_gt = []
         all_rays = []
+        all_target_poses = []
 
         curr_nviews = nviews[torch.randint(0, len(nviews), ()).item()]
         if curr_nviews == 1:
@@ -175,11 +176,17 @@ class PixelNeRFTrainer(trainlib.Trainer):
                 device=device
             )  # (ray_batch_size, 8)
 
+            # Get target poses for each ray
+            target_pose_inds = pix_inds // (H * W) # (ray_batch_size)
+            target_poses = poses[target_pose_inds] # (ray_batch_size, 4, 4)
+
             all_rgb_gt.append(rgb_gt)
             all_rays.append(rays)
+            all_target_poses.append(target_poses)
 
         all_rgb_gt = torch.stack(all_rgb_gt)  # (SB, ray_batch_size, 3)
         all_rays = torch.stack(all_rays)  # (SB, ray_batch_size, 8)
+        all_target_poses = torch.stack(all_target_poses)  # (SB, ray_batch_size, 4, 4)
 
         image_ord = image_ord.to(device)
         src_images = util.batched_index_select_nd(
@@ -196,7 +203,10 @@ class PixelNeRFTrainer(trainlib.Trainer):
             c=all_c.to(device=device) if all_c is not None else None,
         )
 
-        render_dict = DotMap(render_par(all_rays, want_weights=True,))
+        render_dict = DotMap( render_par(all_rays, want_weights=True,),
+                              src_poses=src_poses, # (SB, NS, 4, 4)
+                              target_poses=all_target_poses, # (SB, ray_batch_size, 4, 4)
+                            )
         coarse = render_dict.coarse
         fine = render_dict.fine
         using_fine = len(fine) > 0
@@ -274,7 +284,11 @@ class PixelNeRFTrainer(trainlib.Trainer):
                 c=c.to(device=device) if c is not None else None,
             )
             test_rays = test_rays.reshape(1, H * W, -1)
-            render_dict = DotMap(render_par(test_rays, want_weights=True))
+            render_dict = DotMap( render_par( test_rays, want_weights=True,),
+                                  src_poses=poses[views_src].unsqueeze(0),
+                                  target_pose=poses[view_dest].unsqueeze(0),
+                                )
+
             coarse = render_dict.coarse
             fine = render_dict.fine
 

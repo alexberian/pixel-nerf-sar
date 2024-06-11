@@ -116,7 +116,7 @@ class SpatialEncoder(nn.Module):
         :param x image (B, C, H, W)
         :return latent (B, latent_size, H, W)
         """
-        image_feature = None
+        self.image_feature = None
 
         if self.feature_scale != 1.0:
             x = F.interpolate(

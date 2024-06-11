@@ -6,6 +6,10 @@ import torch.autograd.profiler as profiler
 import util
 
 
+
+
+
+
 # Resnet Blocks
 class ResnetBlockFC(nn.Module):
     """
@@ -129,7 +133,9 @@ class ResnetFC(nn.Module):
         else:
             self.activation = nn.ReLU()
 
-    def forward(self, zx, combine_inner_dims=(1,), combine_index=None, dim_size=None):
+        self.view_combiner = ViewCombiner()
+
+    def forward(self, zx, combine_inner_dims=(1,), combine_index=None, dim_size=None, image_feature = None):
         """
         :param zx (..., d_latent + d_in)
         :param combine_inner_dims Combining dimensions for use with multiview inputs.
@@ -169,9 +175,11 @@ class ResnetFC(nn.Module):
                     #  else:
 
                     # Combines the different processed views into a single tensor
-                    x = self.weighting_algorithm(x, combine_inner_dims)
+                    print('x.shape before combine: ', x.shape)
+                    x = self.view_combiner(x, combine_inner_dims, image_feature, combine_type=self.combine_type)
+                    print('x.shape after combine: ', x.shape)
 
-                if self.d_latent > 0 and blkid < self.combine_layer:
+
                     tz = self.lin_z[blkid](z)
                     if self.use_spade:
                         sz = self.scale_z[blkid](z)
@@ -183,19 +191,6 @@ class ResnetFC(nn.Module):
             out = self.lin_out(self.activation(x))
             return out
 
-
-    def weighting_algorithm(self, x, combine_inner_dims):
-        """
-        :param x (..., d_hidden)
-        :param combine_inner_dims Combining dimensions for use with multiview inputs.
-        Tensor will be reshaped to (-1, combine_inner_dims, ...) and reduced using combine_type
-        on dim 1
-        """
-        if self.combine_type == "average" or self.combine_type == "max":
-            x = util.combine_interleaved(x, combine_inner_dims, self.combine_type)
-        else:
-            raise NotImplementedError("Unsupported combine type " + self.combine_type)
-        return x
 
     @classmethod
     def from_conf(cls, conf, d_in, **kwargs):
@@ -210,3 +205,38 @@ class ResnetFC(nn.Module):
             use_spade=conf.get_bool("use_spade", False),
             **kwargs
         )
+
+
+
+
+class ViewCombiner(nn.Module):
+
+    def combine_interleaved(self, t, inner_dims=(1,), agg_type="average"):
+        if len(inner_dims) == 1 and inner_dims[0] == 1:
+            return t
+        t = t.reshape(-1, *inner_dims, *t.shape[1:])
+        if agg_type == "average":
+            t = torch.mean(t, dim=1)
+        elif agg_type == "max":
+            t = torch.max(t, dim=1)[0]
+        else:
+            raise NotImplementedError("Unsupported combine type " + agg_type)
+        return t
+
+    def forward(self, x, combine_inner_dims, image_feature, combine_type="average"):
+        """
+        :param x (..., d_hidden)
+        :param combine_inner_dims Combining dimensions for use with multiview inputs.
+        Tensor will be reshaped to (-1, combine_inner_dims, ...) and reduced using combine_type
+        on dim 1
+        """
+        # look at the shape of the input tensors
+        print('image_feature.shape: ', image_feature.shape)
+        print('x.shape: ', x.shape)
+        print('combine_inner_dims: ', combine_inner_dims)
+
+        if combine_type == "average" or combine_type == "max":
+            x = self.combine_interleaved(x, combine_inner_dims, combine_type)
+        else:
+            raise NotImplementedError("Unsupported combine type " + combine_type)
+        return x

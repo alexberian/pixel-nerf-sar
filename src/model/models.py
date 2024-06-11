@@ -245,6 +245,7 @@ class PixelNeRFNet(torch.nn.Module):
                     combine_inner_dims=(self.num_views_per_obj, B),
                     combine_index=combine_index,
                     dim_size=dim_size,
+                    image_feature = self.encoder.image_feature,
                 )
             else:
                 mlp_output = self.mlp_fine(
@@ -252,6 +253,7 @@ class PixelNeRFNet(torch.nn.Module):
                     combine_inner_dims=(self.num_views_per_obj, B),
                     combine_index=combine_index,
                     dim_size=dim_size,
+                    image_feature = self.encoder.image_feature,
                 )
 
             # Interpret the output
