@@ -74,7 +74,7 @@ print('type(renderer): ', type(renderer))
 
 # Parallize
 render_par = renderer.bind_parallel(net, args.gpu_id).eval()
-print('type(renderer_par): ', type(renderer_par))
+print('type(render_par): ', type(render_par))
 
 nviews = list(map(int, args.nviews.split()))
 
