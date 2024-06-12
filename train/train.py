@@ -204,6 +204,7 @@ class PixelNeRFTrainer(trainlib.Trainer):
         )
 
         print('===calc_losses===')
+        print('curr_nviews: ',curr_nviews)
         print('all_rays.shape: ', all_rays.shape)
         print('src_poses.shape: ', src_poses.shape)
         print('all_target_poses.shape: ', all_target_poses.shape)

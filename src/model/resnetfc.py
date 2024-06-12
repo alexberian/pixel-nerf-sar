@@ -180,6 +180,7 @@ class ResnetFC(nn.Module):
                     print('x.shape after combine: ', x.shape)
 
 
+                if self.d_latent > 0 and blkid < self.combine_layer:
                     tz = self.lin_z[blkid](z)
                     if self.use_spade:
                         sz = self.scale_z[blkid](z)
