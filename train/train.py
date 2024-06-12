@@ -70,11 +70,9 @@ if args.freeze_enc:
 renderer = NeRFRenderer.from_conf(conf["renderer"], lindisp=dset.lindisp,).to(
     device=device
 )
-print('type(renderer): ', type(renderer))
 
 # Parallize
 render_par = renderer.bind_parallel(net, args.gpu_id).eval()
-print('type(render_par): ', type(render_par))
 
 nviews = list(map(int, args.nviews.split()))
 
@@ -205,16 +203,10 @@ class PixelNeRFTrainer(trainlib.Trainer):
             c=all_c.to(device=device) if all_c is not None else None,
         )
 
-        print('===calc_losses===')
-        print('curr_nviews: ',curr_nviews)
-        print('all_rays.shape: ', all_rays.shape)
-        print('src_poses.shape: ', src_poses.shape)
-        print('all_target_poses.shape: ', all_target_poses.shape)
-        print()
         render_dict = DotMap( render_par(
-            all_rays, # (SB, ray_batch_size, 8)
+            all_rays,                        # (SB, ray_batch_size, 8)
             want_weights=True,
-            src_poses=src_poses, # (SB, NS, 4, 4)
+            src_poses=src_poses,           # (SB, NS            , 4, 4)
             target_poses=all_target_poses, # (SB, ray_batch_size, 4, 4)
         ))
         coarse = render_dict.coarse

@@ -143,7 +143,7 @@ class PixelNeRFNet(torch.nn.Module):
         if self.use_global_encoder:
             self.global_encoder(images)
 
-    def forward(self, xyz, coarse=True, viewdirs=None, far=False):
+    def forward(self, xyz, coarse=True, viewdirs=None, far=False, src_poses = None, target_poses = None):
         """
         Predict (r, g, b, sigma) at world space points xyz.
         Please call encode first!
@@ -246,6 +246,8 @@ class PixelNeRFNet(torch.nn.Module):
                     combine_index=combine_index,
                     dim_size=dim_size,
                     image_feature = self.encoder.image_feature,
+                    src_poses = src_poses,
+                    target_poses = target_poses,
                 )
             else:
                 mlp_output = self.mlp_fine(
@@ -254,6 +256,8 @@ class PixelNeRFNet(torch.nn.Module):
                     combine_index=combine_index,
                     dim_size=dim_size,
                     image_feature = self.encoder.image_feature,
+                    src_poses = src_poses,
+                    target_poses = target_poses,
                 )
 
             # Interpret the output

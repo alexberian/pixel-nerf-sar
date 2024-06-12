@@ -135,7 +135,7 @@ class ResnetFC(nn.Module):
 
         self.view_combiner = ViewCombiner()
 
-    def forward(self, zx, combine_inner_dims=(1,), combine_index=None, dim_size=None, image_feature = None):
+    def forward(self, zx, combine_inner_dims=(1,), combine_index=None, dim_size=None, image_feature = None, src_poses=None, target_poses=None):
         """
         :param zx (..., d_latent + d_in)
         :param combine_inner_dims Combining dimensions for use with multiview inputs.
@@ -175,7 +175,7 @@ class ResnetFC(nn.Module):
                     #  else:
 
                     # Combines the different processed views into a single tensor
-                    x = self.view_combiner(x, combine_inner_dims, image_feature, combine_type=self.combine_type)
+                    x = self.view_combiner(x, combine_inner_dims, image_feature, combine_type=self.combine_type,src_poses=src_poses, target_poses=target_poses)
 
 
                 if self.d_latent > 0 and blkid < self.combine_layer:
