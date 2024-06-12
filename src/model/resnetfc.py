@@ -175,9 +175,7 @@ class ResnetFC(nn.Module):
                     #  else:
 
                     # Combines the different processed views into a single tensor
-                    print('x.shape before combine: ', x.shape)
                     x = self.view_combiner(x, combine_inner_dims, image_feature, combine_type=self.combine_type)
-                    print('x.shape after combine: ', x.shape)
 
 
                 if self.d_latent > 0 and blkid < self.combine_layer:
@@ -232,10 +230,6 @@ class ViewCombiner(nn.Module):
         on dim 1
         """
         # look at the shape of the input tensors
-        print('image_feature.shape: ', image_feature.shape)
-        print('x.shape: ', x.shape)
-        print('combine_inner_dims: ', combine_inner_dims)
-
         if combine_type == "average" or combine_type == "max":
             x = self.combine_interleaved(x, combine_inner_dims, combine_type)
         else:

@@ -70,9 +70,11 @@ if args.freeze_enc:
 renderer = NeRFRenderer.from_conf(conf["renderer"], lindisp=dset.lindisp,).to(
     device=device
 )
+print('type(renderer): ', type(renderer))
 
 # Parallize
 render_par = renderer.bind_parallel(net, args.gpu_id).eval()
+print('type(renderer_par): ', type(renderer_par))
 
 nviews = list(map(int, args.nviews.split()))
 
@@ -212,8 +214,8 @@ class PixelNeRFTrainer(trainlib.Trainer):
         render_dict = DotMap( render_par(
             all_rays, # (SB, ray_batch_size, 8)
             want_weights=True,
-            # src_poses=src_poses, # (SB, NS, 4, 4)
-            # target_poses=all_target_poses, # (SB, ray_batch_size, 4, 4)
+            src_poses=src_poses, # (SB, NS, 4, 4)
+            target_poses=all_target_poses, # (SB, ray_batch_size, 4, 4)
         ))
         coarse = render_dict.coarse
         fine = render_dict.fine
@@ -270,6 +272,8 @@ class PixelNeRFTrainer(trainlib.Trainer):
         for vs in range(curr_nviews):
             view_dest += view_dest >= views_src[vs]
         views_src = torch.from_numpy(views_src)
+        print('view_src: ', views_src)
+        print('view_dest: ', view_dest)
 
         # set renderer net to eval mode
         renderer.eval()
@@ -291,27 +295,17 @@ class PixelNeRFTrainer(trainlib.Trainer):
                 focal.to(device=device),
                 c=c.to(device=device) if c is not None else None,
             )
-            test_rays = test_rays.reshape(1, H * W, -1)
-            src_poses=poses[views_src].unsqueeze(0), # (1, NS, 4, 4)
-            target_poses=poses[view_dest].unsqueeze(0), # (1, 4, 4)
-            print('===vis step===')
-            print('test_rays.shape: ', test_rays.shape)
-            print('src_poses.shape: ', src_poses.shape)
-            print('target_poses.shape: ', target_poses.shape)
-            print()
+            test_rays    = test_rays.reshape(1, H * W, -1)  # (1, H*W, 8)
+            src_poses    = poses[views_src]                 # (NS, 4, 4)
+            target_poses = poses[view_dest]                 # (4, 4)
+            src_poses = src_poses.reshape(1, -1, 4, 4)      # (1, NS, 4, 4)
+            target_poses = target_poses.reshape(1, 1, 4, 4) # (1, 1 , 4, 4)
             render_dict = DotMap( render_par( 
-                test_rays, # (1, H*W , 8)
+                test_rays,                 # (1, H*W, 8)
                 want_weights=True,
-                # src_poses=src_poses, # (1, NS, 4, 4)
-                # target_poses=target_poses, # (1, 4, 4)
+                src_poses=src_poses,       # (1, NS , 4, 4)
+                target_poses=target_poses, # (1, 1  , 4, 4) # the 1 in the second dim is supposed to broadcast with H*W in test_rays
             ))
-            # from calc_losses
-            # render_dict = DotMap( render_par(
-            #     all_rays, # (SB, ray_batch_size, 8)
-            #     want_weights=True,
-            #     src_poses=src_poses, # (SB, NS, 4, 4)
-            #     target_poses=all_target_poses, # (SB, ray_batch_size, 4, 4)
-            # ))
 
             coarse = render_dict.coarse
             fine = render_dict.fine
