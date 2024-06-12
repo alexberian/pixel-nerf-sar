@@ -203,10 +203,17 @@ class PixelNeRFTrainer(trainlib.Trainer):
             c=all_c.to(device=device) if all_c is not None else None,
         )
 
-        render_dict = DotMap( render_par(all_rays, want_weights=True,),
-                              src_poses=src_poses, # (SB, NS, 4, 4)
-                              target_poses=all_target_poses, # (SB, ray_batch_size, 4, 4)
-                            )
+        print('===calc_losses===')
+        print('all_rays.shape: ', all_rays.shape)
+        print('src_poses.shape: ', src_poses.shape)
+        print('all_target_poses.shape: ', all_target_poses.shape)
+        print()
+        render_dict = DotMap( render_par(
+            all_rays, # (SB, ray_batch_size, 8)
+            want_weights=True,
+            # src_poses=src_poses, # (SB, NS, 4, 4)
+            # target_poses=all_target_poses, # (SB, ray_batch_size, 4, 4)
+        ))
         coarse = render_dict.coarse
         fine = render_dict.fine
         using_fine = len(fine) > 0
@@ -284,10 +291,26 @@ class PixelNeRFTrainer(trainlib.Trainer):
                 c=c.to(device=device) if c is not None else None,
             )
             test_rays = test_rays.reshape(1, H * W, -1)
-            render_dict = DotMap( render_par( test_rays, want_weights=True,),
-                                  src_poses=poses[views_src].unsqueeze(0),
-                                  target_pose=poses[view_dest].unsqueeze(0),
-                                )
+            src_poses=poses[views_src].unsqueeze(0), # (1, NS, 4, 4)
+            target_poses=poses[view_dest].unsqueeze(0), # (1, 4, 4)
+            print('===vis step===')
+            print('test_rays.shape: ', test_rays.shape)
+            print('src_poses.shape: ', src_poses.shape)
+            print('target_poses.shape: ', target_poses.shape)
+            print()
+            render_dict = DotMap( render_par( 
+                test_rays, # (1, H*W , 8)
+                want_weights=True,
+                # src_poses=src_poses, # (1, NS, 4, 4)
+                # target_poses=target_poses, # (1, 4, 4)
+            ))
+            # from calc_losses
+            # render_dict = DotMap( render_par(
+            #     all_rays, # (SB, ray_batch_size, 8)
+            #     want_weights=True,
+            #     src_poses=src_poses, # (SB, NS, 4, 4)
+            #     target_poses=all_target_poses, # (SB, ray_batch_size, 4, 4)
+            # ))
 
             coarse = render_dict.coarse
             fine = render_dict.fine
