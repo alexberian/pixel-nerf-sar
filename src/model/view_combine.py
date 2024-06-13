@@ -5,6 +5,15 @@ import torch
 import torch.autograd.profiler as profiler
 
 
+def get_combine_module(combine_type):
+    """
+    return a view combiner module based on the combine_type
+    """
+    if combine_type == "average" or combine_type == "max":
+        return VanillaPixelnerfViewCombiner()
+    else:
+        raise NotImplementedError("Unsupported combine type " + combine_type)
+
 
 
 class VanillaPixelnerfViewCombiner(nn.Module):

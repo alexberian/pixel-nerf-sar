@@ -4,7 +4,7 @@ import torch
 #  import torch_scatter
 import torch.autograd.profiler as profiler
 
-from .view_combine import VanillaPixelnerfViewCombiner
+from .view_combine import get_combine_module
 
 
 
@@ -134,7 +134,7 @@ class ResnetFC(nn.Module):
         else:
             self.activation = nn.ReLU()
 
-        self.view_combiner = VanillaPixelnerfViewCombiner()
+        self.view_combiner = get_combine_module(self.combine_type)
 
     def forward(self, zx, combine_inner_dims=(1,), combine_index=None, dim_size=None, image_feature = None, src_poses = None, target_poses = None):
         """
@@ -176,7 +176,14 @@ class ResnetFC(nn.Module):
                     #  else:
 
                     # Combines the different processed views into a single tensor
-                    x = self.view_combiner(x, combine_inner_dims, combine_type=self.combine_type, imag_feature=image_feature, src_poses=src_poses, target_poses=target_poses)
+                    x = self.view_combiner(
+                        x,
+                        combine_inner_dims,
+                        combine_type = self.combine_type,
+                        imag_feature = image_feature,
+                        src_poses    = src_poses,
+                        target_poses = target_poses,
+                    )
 
 
                 if self.d_latent > 0 and blkid < self.combine_layer:
