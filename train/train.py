@@ -198,16 +198,14 @@ class PixelNeRFTrainer(trainlib.Trainer):
 
         net.encode(
             src_images,
-            src_poses,
+            src_poses, # (SB, NS, 4, 4)
             all_focals.to(device=device),
             c=all_c.to(device=device) if all_c is not None else None,
-        )
-
-        render_dict = DotMap( render_par(
-            all_rays,                        # (SB, ray_batch_size, 8)
-            want_weights=True,
-            src_poses=src_poses,           # (SB, NS            , 4, 4)
             target_poses=all_target_poses, # (SB, ray_batch_size, 4, 4)
+        )
+        render_dict = DotMap( render_par(
+            all_rays, # (SB, ray_batch_size, 8)
+            want_weights=True,
         ))
         coarse = render_dict.coarse
         fine = render_dict.fine
@@ -244,7 +242,6 @@ class PixelNeRFTrainer(trainlib.Trainer):
         if idx is None:
             batch_idx = np.random.randint(0, data["images"].shape[0])
         else:
-            print(idx)
             batch_idx = idx
         images = data["images"][batch_idx].to(device=device)  # (NV, 3, H, W)
         poses = data["poses"][batch_idx].to(device=device)  # (NV, 4, 4)
@@ -264,8 +261,6 @@ class PixelNeRFTrainer(trainlib.Trainer):
         for vs in range(curr_nviews):
             view_dest += view_dest >= views_src[vs]
         views_src = torch.from_numpy(views_src)
-        print('view_src: ', views_src)
-        print('view_dest: ', view_dest)
 
         # set renderer net to eval mode
         renderer.eval()
@@ -281,22 +276,19 @@ class PixelNeRFTrainer(trainlib.Trainer):
         with torch.no_grad():
             test_rays = cam_rays[view_dest]  # (H, W, 8)
             test_images = images[views_src]  # (NS, 3, H, W)
+            target_poses = poses[view_dest]                 # (4, 4)
+            target_poses = target_poses.reshape(1, 1, 4, 4) # (1, 1  , 4, 4) # the 1 in the second dim is supposed to broadcast with H*W in test_rays
             net.encode(
                 test_images.unsqueeze(0),
-                poses[views_src].unsqueeze(0),
+                poses[views_src].unsqueeze(0), # (1, NS, 4, 4)
                 focal.to(device=device),
                 c=c.to(device=device) if c is not None else None,
+                target_poses = target_poses, # (1, 1, 4, 4)
             )
             test_rays    = test_rays.reshape(1, H * W, -1)  # (1, H*W, 8)
-            src_poses    = poses[views_src]                 # (NS, 4, 4)
-            target_poses = poses[view_dest]                 # (4, 4)
-            src_poses = src_poses.reshape(1, -1, 4, 4)      # (1, NS, 4, 4)
-            target_poses = target_poses.reshape(1, 1, 4, 4) # (1, 1 , 4, 4)
             render_dict = DotMap( render_par( 
                 test_rays,                 # (1, H*W, 8)
                 want_weights=True,
-                src_poses=src_poses,       # (1, NS , 4, 4)
-                target_poses=target_poses, # (1, 1  , 4, 4) # the 1 in the second dim is supposed to broadcast with H*W in test_rays
             ))
 
             coarse = render_dict.coarse

@@ -19,17 +19,14 @@ class _RenderWrapper(torch.nn.Module):
         self.renderer = renderer
         self.simple_output = simple_output
 
-    def forward(self, rays, want_weights=False, src_poses=None, target_poses=None):
+    def forward(self, rays, want_weights=False):
         if rays.shape[0] == 0:
             return (
                 torch.zeros(0, 3, device=rays.device),
                 torch.zeros(0, device=rays.device),
             )
 
-        outputs = self.renderer(
-            self.net, rays, want_weights=want_weights and not self.simple_output,
-            src_poses = src_poses, target_poses = target_poses,
-        )
+        outputs = self.renderer( self.net, rays, want_weights=want_weights and not self.simple_output)
         if self.simple_output:
             if self.renderer.using_fine:
                 rgb = outputs.fine.rgb
@@ -161,7 +158,7 @@ class NeRFRenderer(torch.nn.Module):
         z_samp = torch.max(torch.min(z_samp, rays[:, -1:]), rays[:, -2:-1])
         return z_samp
 
-    def composite(self, model, rays, z_samp, coarse=True, sb=0, src_poses = None, target_poses = None):
+    def composite(self, model, rays, z_samp, coarse=True, sb=0):
         """
         Render RGB and depth for each ray using NeRF alpha-compositing formula,
         given sampled positions along each ray (see sample_*)
@@ -211,7 +208,7 @@ class NeRFRenderer(torch.nn.Module):
                     viewdirs, eval_batch_size, dim=eval_batch_dim
                 )
                 for pnts, dirs in zip(split_points, split_viewdirs):
-                    val_all.append(model(pnts, coarse=coarse, viewdirs=dirs, src_poses=src_poses, target_poses=target_poses))
+                    val_all.append(model(pnts, coarse=coarse, viewdirs=dirs))
             else:
                 for pnts in split_points:
                     val_all.append(model(pnts, coarse=coarse))
@@ -249,10 +246,7 @@ class NeRFRenderer(torch.nn.Module):
                 depth_final,
             )
 
-    def forward(
-        self, model, rays, want_weights=False,
-        src_poses = None, target_poses = None,
-    ):
+    def forward( self, model, rays, want_weights=False,):
         """
         :model nerf model, should return (SB, B, (r, g, b, sigma))
         when called with (SB, B, (x, y, z)), for multi-object:
@@ -274,7 +268,7 @@ class NeRFRenderer(torch.nn.Module):
 
             z_coarse = self.sample_coarse(rays)  # (B, Kc)
             coarse_composite = self.composite(
-                model, rays, z_coarse, coarse=True, sb=superbatch_size, src_poses=src_poses, target_poses=target_poses,
+                model, rays, z_coarse, coarse=True, sb=superbatch_size,
             )
 
             outputs = DotMap(
@@ -296,7 +290,7 @@ class NeRFRenderer(torch.nn.Module):
                 z_combine = torch.cat(all_samps, dim=-1)  # (B, Kc + Kf)
                 z_combine_sorted, argsort = torch.sort(z_combine, dim=-1)
                 fine_composite = self.composite(
-                    model, rays, z_combine_sorted, coarse=False, sb=superbatch_size, src_poses=src_poses, target_poses=target_poses,
+                    model, rays, z_combine_sorted, coarse=False, sb=superbatch_size,
                 )
                 outputs.fine = self._format_outputs(
                     fine_composite, superbatch_size, want_weights=want_weights,

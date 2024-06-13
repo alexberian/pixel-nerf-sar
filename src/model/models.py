@@ -86,16 +86,21 @@ class PixelNeRFNet(torch.nn.Module):
         self.num_objs = 0
         self.num_views_per_obj = 1
 
-    def encode(self, images, poses, focal, z_bounds=None, c=None):
+    def encode(self, images, poses, focal, z_bounds=None, c=None, target_poses=None):
         """
         :param images (NS, 3, H, W)
         NS is number of input (aka source or reference) views
-        :param poses (NS, 4, 4)
+        :param poses (SB, NS, 4, 4)
         :param focal focal length () or (2) or (NS) or (NS, 2) [fx, fy]
         :param z_bounds ignored argument (used in the past)
         :param c principal point None or () or (2) or (NS) or (NS, 2) [cx, cy],
+        :param target_poses (SB, ray_batch_size, 4, 4) target poses for the views,
         default is center of image
         """
+        # save source and target poses to the encoder
+        self.encoder.src_poses = poses
+        self.encoder.target_poses = target_poses
+
         self.num_objs = images.size(0)
         if len(images.shape) == 5:
             assert len(poses.shape) == 4
@@ -143,7 +148,7 @@ class PixelNeRFNet(torch.nn.Module):
         if self.use_global_encoder:
             self.global_encoder(images)
 
-    def forward(self, xyz, coarse=True, viewdirs=None, far=False, src_poses = None, target_poses = None):
+    def forward(self, xyz, coarse=True, viewdirs=None, far=False):
         """
         Predict (r, g, b, sigma) at world space points xyz.
         Please call encode first!
@@ -246,8 +251,8 @@ class PixelNeRFNet(torch.nn.Module):
                     combine_index=combine_index,
                     dim_size=dim_size,
                     image_feature = self.encoder.image_feature,
-                    src_poses = src_poses,
-                    target_poses = target_poses,
+                    src_poses = self.encoder.src_poses,
+                    target_poses = self.encoder.target_poses,
                 )
             else:
                 mlp_output = self.mlp_fine(
@@ -256,8 +261,8 @@ class PixelNeRFNet(torch.nn.Module):
                     combine_index=combine_index,
                     dim_size=dim_size,
                     image_feature = self.encoder.image_feature,
-                    src_poses = src_poses,
-                    target_poses = target_poses,
+                    src_poses = self.encoder.src_poses,
+                    target_poses = self.encoder.target_poses,
                 )
 
             # Interpret the output

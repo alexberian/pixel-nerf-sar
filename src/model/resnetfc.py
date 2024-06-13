@@ -133,9 +133,9 @@ class ResnetFC(nn.Module):
         else:
             self.activation = nn.ReLU()
 
-        self.view_combiner = ViewCombiner()
+        self.view_combiner = VanillaPixelnerfViewCombiner()
 
-    def forward(self, zx, combine_inner_dims=(1,), combine_index=None, dim_size=None, image_feature = None, src_poses=None, target_poses=None):
+    def forward(self, zx, combine_inner_dims=(1,), combine_index=None, dim_size=None, image_feature = None, src_poses = None, target_poses = None):
         """
         :param zx (..., d_latent + d_in)
         :param combine_inner_dims Combining dimensions for use with multiview inputs.
@@ -175,7 +175,7 @@ class ResnetFC(nn.Module):
                     #  else:
 
                     # Combines the different processed views into a single tensor
-                    x = self.view_combiner(x, combine_inner_dims, image_feature, combine_type=self.combine_type,src_poses=src_poses, target_poses=target_poses)
+                    x = self.view_combiner(x, combine_inner_dims, combine_type=self.combine_type, imag_feature=image_feature, src_poses=src_poses, target_poses=target_poses)
 
 
                 if self.d_latent > 0 and blkid < self.combine_layer:
@@ -208,7 +208,7 @@ class ResnetFC(nn.Module):
 
 
 
-class ViewCombiner(nn.Module):
+class VanillaPixelnerfViewCombiner(nn.Module):
 
     def combine_interleaved(self, t, inner_dims=(1,), agg_type="average"):
         if len(inner_dims) == 1 and inner_dims[0] == 1:
@@ -222,16 +222,11 @@ class ViewCombiner(nn.Module):
             raise NotImplementedError("Unsupported combine type " + agg_type)
         return t
 
-    def forward(self, x, combine_inner_dims, image_feature, combine_type="average"):
+    def forward(self, x, combine_inner_dims, combine_type="average", **kwargs):
         """
         :param x (..., d_hidden)
         :param combine_inner_dims Combining dimensions for use with multiview inputs.
         Tensor will be reshaped to (-1, combine_inner_dims, ...) and reduced using combine_type
         on dim 1
         """
-        # look at the shape of the input tensors
-        if combine_type == "average" or combine_type == "max":
-            x = self.combine_interleaved(x, combine_inner_dims, combine_type)
-        else:
-            raise NotImplementedError("Unsupported combine type " + combine_type)
-        return x
+        return self.combine_interleaved(x, combine_inner_dims, combine_type)
