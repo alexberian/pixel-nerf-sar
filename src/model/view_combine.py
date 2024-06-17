@@ -110,12 +110,25 @@ class CamDistanceAngleErrorCombiner(nn.Module):
         relative_poses = calculate_relative_pose(src_poses, target_poses) # (SB, NS, ray_batch_size, 4, 4)
 
         # Extract translation and rotation
-        t_r = relative_poses[..., :3, 3:4]
-        R_r = relative_poses[..., :3, :3]
+        t_r = relative_poses[..., :3, 3:4] # (..., 3, 1)
+        R_r = relative_poses[..., :3, :3] # (..., 3, 3)
 
         # calculate angle and distance
-        angle = torch.acos((R_r[..., 0, 0] + R_r[..., 1, 1] + R_r[..., 2, 2] - 1) / 2)
+        # c_r = -R_r.T @ t_r # (..., 3, 1)
+        # cos_theta = torch.sum(c_r * t_r, dim=-2)/torch.norm(c_r, dim=-2)**2 # (..., 1)
+        # angle = torch.acos(cos_theta)[...,0] # (...,)
+        angle = torch.acos((R_r[..., 0, 0] + R_r[..., 1, 1] + R_r[..., 2, 2] - 1) / 2) # chatgpt wrote this, idk if it's right
         distance = torch.norm(t_r, dim=-2)
-    
-        
 
+        # calculate weight per source view
+        error = self.alpha*angle + (1-self.alpha)*distance # (SB, NS, ray_batch_size)
+        weights = nn.softmax(-error,dim=1)
+
+        # apply weights
+        x = x.reshape(-1,*combine_inner_dims,*x.shape[1:]) # (????)
+        x = x*weights # (????)
+        x = torch.mean(x,dim=1)
+        return x
+
+
+    
