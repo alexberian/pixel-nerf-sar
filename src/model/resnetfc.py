@@ -1,3 +1,4 @@
+import sys
 from torch import nn
 import torch
 
@@ -77,7 +78,8 @@ class ResnetFC(nn.Module):
         d_hidden=128,
         beta=0.0,
         combine_layer=1000,
-        combine_type="average",
+        combine_type="error.5",
+        # combine_type="average",
         use_spade=False,
     ):
         """
@@ -106,6 +108,9 @@ class ResnetFC(nn.Module):
 
         self.combine_layer = combine_layer
         self.combine_type = combine_type
+        print('initial combine_type: ', self.combine_type)
+        self.combine_type = "error.5" # Hardcoded for now
+        print('hardcoded combine_type: ', self.combine_type)
         self.use_spade = use_spade
 
         self.blocks = nn.ModuleList(
@@ -184,6 +189,7 @@ class ResnetFC(nn.Module):
                         src_poses    = src_poses,
                         target_poses = target_poses,
                     )
+                    print('x.shape: ', x.shape)
 
 
                 if self.d_latent > 0 and blkid < self.combine_layer:
@@ -195,7 +201,10 @@ class ResnetFC(nn.Module):
                         x = x + tz
 
                 x = self.blocks[blkid](x)
+                print('x.shape: ', x.shape)
             out = self.lin_out(self.activation(x))
+            print('out.shape: ', out.shape)
+            sys.exit()
             return out
 
 

@@ -1,3 +1,4 @@
+import sys
 from torch import nn
 import torch
 
@@ -10,13 +11,14 @@ def get_combine_module(combine_type):
     return a view combiner module based on the combine_type
     """
 
-    _COMBINE_STR_TO_MODULE = {
+    combine_str_to_module = {
         "average": "VanillaPixelnerfViewCombiner",
         "max": "VanillaPixelnerfViewCombiner",
+        "error.5": "CamDistanceAngleErrorCombiner",
     }
 
-    if combine_type in _COMBINE_STR_TO_MODULE:
-        return globals()[_COMBINE_STR_TO_MODULE[combine_type]]()
+    if combine_type in combine_str_to_module:
+        return globals()[combine_str_to_module[combine_type]]()
     else:
         raise NotImplementedError("Unsupported combine type " + combine_type)
 
@@ -93,7 +95,7 @@ class CamDistanceAngleErrorCombiner(nn.Module):
     Angle vs Distance are weighted by alpha, 1-alpha respectively.
     """
 
-    def __init__(self, alpha=1.0):
+    def __init__(self, alpha=0.5):
         assert(alpha >= 0 and alpha <= 1.0), "alpha must be between [0, 1]"
         self.alpha = alpha
         super().__init__()
@@ -106,29 +108,44 @@ class CamDistanceAngleErrorCombiner(nn.Module):
         :param src_poses (SB, NS, 4, 4) source poses
         :param target_poses (SB, ray_batch_size, 4, 4) target poses
         """
-        # calculate relative pose
-        relative_poses = calculate_relative_pose(src_poses, target_poses) # (SB, NS, ray_batch_size, 4, 4)
 
-        # Extract translation and rotation
-        t_r = relative_poses[..., :3, 3:4] # (..., 3, 1)
-        R_r = relative_poses[..., :3, :3] # (..., 3, 3)
+        # reshape for broadcasting
+        SB, NS, _, _ = src_poses.shape
+        _, ray_batch_size, _, _ = target_poses.shape
+        src_poses = src_poses.reshape(SB, NS, 1, 4, 4)
+        target_poses = target_poses.reshape(SB, 1, ray_batch_size, 4, 4)
 
-        # calculate angle and distance
-        # c_r = -R_r.T @ t_r # (..., 3, 1)
-        # cos_theta = torch.sum(c_r * t_r, dim=-2)/torch.norm(c_r, dim=-2)**2 # (..., 1)
-        # angle = torch.acos(cos_theta)[...,0] # (...,)
-        angle = torch.acos((R_r[..., 0, 0] + R_r[..., 1, 1] + R_r[..., 2, 2] - 1) / 2) # chatgpt wrote this, idk if it's right
-        distance = torch.norm(t_r, dim=-2)
+        # extracy rotation and translation
+        R_s = src_poses[..., :3, :3]     # (SB, NS, 1             , 3, 3)
+        R_t = target_poses[..., :3, :3]  # (SB, 1 , ray_batch_size, 3, 3)
+        t_s = src_poses[..., :3, 3:4]    # (SB, NS, 1             , 3, 1)
+        t_t = target_poses[..., :3, 3:4] # (SB, 1 , ray_batch_size, 3, 1)
 
-        # calculate weight per source view
-        error = self.alpha*angle + (1-self.alpha)*distance # (SB, NS, ray_batch_size)
-        weights = nn.softmax(-error,dim=1)
+        # calculate distance and angle
+        c_s = -R_s.permute(0, 1, 2, 4, 3) @ t_s # (SB, NS, 1, 3, 1)
+        c_t = -R_t.permute(0, 1, 2, 4, 3) @ t_t # (SB, 1 , ray_batch_size, 3, 1)
+        dist = torch.norm(c_s - c_t, dim=-2) # (SB, NS, ray_batch_size, 1)
+        dist = dist[..., 0] # (SB, NS, ray_batch_size)
+        angle = torch.acos(torch.sum(R_s[...,2,:]*R_t[...,2,:], dim=-1)) # (SB, NS, ray_batch_size)
 
-        # apply weights
-        x = x.reshape(-1,*combine_inner_dims,*x.shape[1:]) # (????)
-        x = x*weights # (????)
-        x = torch.mean(x,dim=1)
-        return x
+        # calculate weights
+        dist_weight  = 1 - dist  / torch.max(dist , dim=-1, keepdim=True)[0] # (SB, NS, ray_batch_size)
+        angle_weight = 1 - angle / torch.max(angle, dim=-1, keepdim=True)[0] # (SB, NS, ray_batch_size)
+        weight = self.alpha * dist_weight + (1 - self.alpha) * angle_weight # (SB, NS, ray_batch_size)
 
+        # print('SB: ', SB)
+        # print('NS: ', NS)
+        # print('ray_batch_size: ', ray_batch_size)
+        # print('angle.shape: ', angle.shape)
+        # print('dist.shape: ', dist.shape)
+        
+
+
+        # print('x.shape: ', x.shape)
+        x = x.reshape(-1, *combine_inner_dims, *x.shape[1:])
+        # print('x.shape: ', x.shape)
+
+
+        return torch.mean(x, dim=1)
 
     

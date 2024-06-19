@@ -173,9 +173,9 @@ class PixelNeRFNet(torch.nn.Module):
                 # * Encode the xyz coordinates
                 if self.use_xyz:
                     if self.normalize_z:
-                        z_feature = xyz_rot.reshape(-1, 3)  # (SB*B, 3)
+                        z_feature = xyz_rot.reshape(-1, 3)  # (SB*NS*B, 3)
                     else:
-                        z_feature = xyz.reshape(-1, 3)  # (SB*B, 3)
+                        z_feature = xyz.reshape(-1, 3)  # (SB*NS*B, 3)
                 else:
                     if self.normalize_z:
                         z_feature = -xyz_rot[..., 2].reshape(-1, 1)  # (SB*B, 1)
@@ -184,7 +184,7 @@ class PixelNeRFNet(torch.nn.Module):
 
                 if self.use_code and not self.use_code_viewdirs:
                     # Positional encoding (no viewdirs)
-                    z_feature = self.code(z_feature)
+                    z_feature = self.code(z_feature) # (SB*NS*B, 39)
 
                 if self.use_viewdirs:
                     # * Encode the view directions
@@ -195,10 +195,10 @@ class PixelNeRFNet(torch.nn.Module):
                     viewdirs = torch.matmul(
                         self.poses[:, None, :3, :3], viewdirs
                     )  # (SB*NS, B, 3, 1)
-                    viewdirs = viewdirs.reshape(-1, 3)  # (SB*B, 3)
+                    viewdirs = viewdirs.reshape(-1, 3)  # (SB*NS*B, 3)
                     z_feature = torch.cat(
                         (z_feature, viewdirs), dim=1
-                    )  # (SB*B, 4 or 6)
+                    )  # (SB*NS*B, 4 or 6) i got 42, not 4 or 6
 
                 if self.use_code and self.use_code_viewdirs:
                     # Positional encoding (with viewdirs)
@@ -208,7 +208,7 @@ class PixelNeRFNet(torch.nn.Module):
 
             if self.use_encoder:
                 # Grab encoder's latent code.
-                uv = -xyz[:, :, :2] / xyz[:, :, 2:]  # (SB, B, 2)
+                uv = -xyz[:, :, :2] / xyz[:, :, 2:]  # (SB*NS, B, 2)
                 uv *= repeat_interleave(
                     self.focal.unsqueeze(1), NS if self.focal.shape[0] > 1 else 1
                 )
