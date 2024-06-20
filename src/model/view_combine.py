@@ -102,6 +102,9 @@ class CamDistanceAngleErrorCombiner(nn.Module):
 
     def forward(self, x, combine_inner_dims, combine_type="average", src_poses=None, target_poses=None, **kwargs):
         """
+        x's shape is (SB*NS*B'*K,H)
+        combine_inner_dims is (NS,B'*K)
+
         :param x (..., d_hidden)
         :param combine_inner_dims Combining dimensions for use with multiview inputs.
         Tensor will be reshaped to (-1, combine_inner_dims, ...) and reduce on axis 1
