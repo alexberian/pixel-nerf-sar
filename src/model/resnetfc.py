@@ -189,8 +189,6 @@ class ResnetFC(nn.Module):
                         src_poses    = src_poses,
                         target_poses = target_poses,
                     )
-                    print('x.shape: ', x.shape)
-
 
                 if self.d_latent > 0 and blkid < self.combine_layer:
                     tz = self.lin_z[blkid](z)
@@ -201,11 +199,10 @@ class ResnetFC(nn.Module):
                         x = x + tz
 
                 x = self.blocks[blkid](x)
-                print('x.shape: ', x.shape)
+
             out = self.lin_out(self.activation(x))
-            print('out.shape: ', out.shape)
-            sys.exit()
             return out
+
 
 
     @classmethod
