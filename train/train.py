@@ -1,6 +1,7 @@
 # Training to a set of multiple objects (e.g. ShapeNet or DTU)
 # tensorboard logs available in logs/<expname>
 
+import time
 import sys
 import os
 
@@ -222,6 +223,7 @@ class PixelNeRFTrainer(trainlib.Trainer):
 
         loss = rgb_loss
         if is_train:
+            time.sleep(5) # to check memory usage
             loss.backward()
         loss_dict["t"] = loss.item()
 
