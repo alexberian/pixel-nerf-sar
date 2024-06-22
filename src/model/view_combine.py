@@ -14,8 +14,11 @@ def get_combine_module(combine_type):
     combine_str_to_module = {
         "average": "VanillaPixelnerfViewCombiner",
         "max": "VanillaPixelnerfViewCombiner",
-        "error.5": "CamDistanceAngleErrorCombiner",
     }
+
+    if "error" in combine_type:
+        return CamDistanceAngleErrorCombiner(alpha=float(combine_type.split("error")[1]))
+            
 
     if combine_type in combine_str_to_module:
         return globals()[combine_str_to_module[combine_type]]()

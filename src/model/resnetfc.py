@@ -108,9 +108,6 @@ class ResnetFC(nn.Module):
 
         self.combine_layer = combine_layer
         self.combine_type = combine_type
-        print('initial combine_type: ', self.combine_type)
-        self.combine_type = "error.5" # Hardcoded for now
-        print('hardcoded combine_type: ', self.combine_type)
         self.use_spade = use_spade
 
         self.blocks = nn.ModuleList(
@@ -214,7 +211,7 @@ class ResnetFC(nn.Module):
             d_hidden=conf.get_int("d_hidden", 128),
             beta=conf.get_float("beta", 0.0),
             combine_layer=conf.get_int("combine_layer", 1000),
-            combine_type=conf.get_string("combine_type", "average"),  # average | max
+            # combine_type=conf.get_string("combine_type", "average"),  # average | max # combine type is now in args
             use_spade=conf.get_bool("use_spade", False),
             **kwargs
         )

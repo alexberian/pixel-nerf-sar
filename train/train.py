@@ -51,6 +51,12 @@ def extra_args(parser):
         default=None,
         help="Freeze encoder weights and only train MLP",
     )
+    parser.add_argument(
+        "--combine_type",
+        type=str,
+        default="average",
+        help="How to combine multiview images within the MLP",
+    )
     return parser
 
 
@@ -62,7 +68,7 @@ print(
     "dset z_near {}, z_far {}, lindisp {}".format(dset.z_near, dset.z_far, dset.lindisp)
 )
 
-net = make_model(conf["model"]).to(device=device)
+net = make_model(conf["model"], combine_type=args.combine_type).to(device=device)
 net.stop_encoder_grad = args.freeze_enc
 if args.freeze_enc:
     print("Encoder frozen")
@@ -223,7 +229,6 @@ class PixelNeRFTrainer(trainlib.Trainer):
 
         loss = rgb_loss
         if is_train:
-            time.sleep(5) # to check memory usage
             loss.backward()
         loss_dict["t"] = loss.item()
 
