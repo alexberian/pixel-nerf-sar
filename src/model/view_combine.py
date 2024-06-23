@@ -148,30 +148,26 @@ class CamDistanceAngleErrorCombiner(VanillaPixelnerfViewCombiner):
         angle = torch.acos(torch.sum(R_s[...,2,:]*R_t[...,2,:], dim=-1)) # (SB, NS, B')
 
         # place the angle in the range [0, pi]
-        plt.hist(angle.cpu().numpy())
-        plt.title("Angle distribution step 0")
-        save_fig("angle_distribution_step_0.png")
+        print("step 0 : min,max angle = (%.2f,%.2f)" % (angle.min(), angle.max()))
         angle = torch.remainder(angle, 2 * torch.pi)  # Step 1: Normalize to [0, 2*pi)
-        plt.hist(angle.cpu().numpy())
-        plt.title("Angle distribution step 1")
-        save_fig("angle_distribution_step_1.png")
+        print("step 1 : min,max angle = (%.2f,%.2f)" % (angle.min(), angle.max()))
         angle[angle >= torch.pi] -= 2 * torch.pi      # Step 2: Adjust values >= pi to be in the range [-pi, pi)
-        plt.hist(angle.cpu().numpy())
-        plt.title("Angle distribution step 2")
-        save_fig("angle_distribution_step_2.png")
+        print("step 2 : min,max angle = (%.2f,%.2f)" % (angle.min(), angle.max()))
         angle = torch.abs(angle)                      # Step 3: Take the absolute value
-        plt.hist(angle.cpu().numpy())
-        plt.title("Angle distribution step 3")
-        save_fig("angle_distribution_step_3.png")
+        print("step 3 : min,max angle = (%.2f,%.2f)" % (angle.min(), angle.max()))
+
+        plt.hist(angle.flatten().cpu().numpy())
+        plt.title("Angular error distribution")
+        save_fig("angular_error_distribution.png")
 
         # make sure there are no negative  or nan values
-        assert(torch.all(dist >= 0))                  , "dist should be non-negative"
-        assert(torch.all(angle >= 0))                 , "angle should be non-negative"
-        assert(torch.all(angle <= torch.pi))          , "angle should be less than pi"
         assert(torch.all(torch.isfinite(dist)))       , "dist should be finite"
         assert(torch.all(torch.isfinite(angle)))      , "angle should be finite"
         assert(torch.all(torch.isnan(dist) == False)) , "dist should not be nan"
         assert(torch.all(torch.isnan(angle) == False)), "angle should not"
+        assert(torch.all(dist >= 0))                  , "dist should be non-negative"
+        assert(torch.all(angle >= 0))                 , "angle should be non-negative"
+        assert(torch.all(angle <= torch.pi))          , "angle should be less than pi"
 
         # apply balancing epsilon
         dist += self.epsilon
