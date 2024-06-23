@@ -148,6 +148,7 @@ class CamDistanceAngleErrorCombiner(VanillaPixelnerfViewCombiner):
         angle = torch.acos(torch.sum(R_s[...,2,:]*R_t[...,2,:], dim=-1)) # (SB, NS, B')
 
         # place the angle in the range [0, pi]
+        print()
         print("step 0 : min,max angle = (%.2f,%.2f)" % (angle.min(), angle.max()))
         angle = torch.remainder(angle, 2 * torch.pi)  # Step 1: Normalize to [0, 2*pi)
         print("step 1 : min,max angle = (%.2f,%.2f)" % (angle.min(), angle.max()))
@@ -159,6 +160,7 @@ class CamDistanceAngleErrorCombiner(VanillaPixelnerfViewCombiner):
         plt.hist(angle.flatten().cpu().numpy())
         plt.title("Angular error distribution")
         save_fig("angular_error_distribution.png")
+        print()
 
         # make sure there are no negative  or nan values
         assert(torch.all(torch.isfinite(dist)))       , "dist should be finite"
