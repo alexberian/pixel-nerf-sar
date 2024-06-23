@@ -1,6 +1,7 @@
 import sys
 from torch import nn
 import torch
+from util import plt, save_fig
 
 #  import torch_scatter
 import torch.autograd.profiler as profiler
@@ -89,7 +90,7 @@ class VanillaPixelnerfViewCombiner(nn.Module):
         return self.combine_interleaved(x, combine_inner_dims, combine_type)
 
 
-class CamDistanceAngleErrorCombiner(nn.Module):
+class CamDistanceAngleErrorCombiner(VanillaPixelnerfViewCombiner):
     """
     Weighs input views based on the distance and angle between the source and target views.
     source views that are closer to the target view are weighted more heavily. Angle is also
@@ -98,9 +99,11 @@ class CamDistanceAngleErrorCombiner(nn.Module):
     Angle vs Distance are weighted by alpha, 1-alpha respectively.
     """
 
-    def __init__(self, alpha=0.5):
+    def __init__(self, alpha=0.5, epsilon=0.001):
         assert(alpha >= 0 and alpha <= 1.0), "alpha must be between [0, 1]"
+        assert(epsilon >= 0), "epsilon must be non-negative"
         self.alpha = alpha
+        self.epsilon = epsilon
         super().__init__()
 
     def forward(self, x, combine_inner_dims, combine_type="average", src_poses=None, target_poses=None, **kwargs):
@@ -123,6 +126,8 @@ class CamDistanceAngleErrorCombiner(nn.Module):
 
         # reshape for broadcasting
         SB, NS, _, _ = src_poses.shape
+        if NS == 1: # if only one source view, don't need to combine
+            return super().forward(x, combine_inner_dims, "average")
         _, Bp, _, _ = target_poses.shape
         K = combine_inner_dims[1] // Bp
         H = x.shape[-1]
@@ -142,9 +147,39 @@ class CamDistanceAngleErrorCombiner(nn.Module):
         dist = dist[..., 0] # (SB, NS, B')
         angle = torch.acos(torch.sum(R_s[...,2,:]*R_t[...,2,:], dim=-1)) # (SB, NS, B')
 
+        # place the angle in the range [0, pi]
+        plt.hist(angle.cpu().numpy())
+        plt.title("Angle distribution step 0")
+        save_fig("angle_distribution_step_0.png")
+        angle = torch.remainder(angle, 2 * torch.pi)  # Step 1: Normalize to [0, 2*pi)
+        plt.hist(angle.cpu().numpy())
+        plt.title("Angle distribution step 1")
+        save_fig("angle_distribution_step_1.png")
+        angle[angle >= torch.pi] -= 2 * torch.pi      # Step 2: Adjust values >= pi to be in the range [-pi, pi)
+        plt.hist(angle.cpu().numpy())
+        plt.title("Angle distribution step 2")
+        save_fig("angle_distribution_step_2.png")
+        angle = torch.abs(angle)                      # Step 3: Take the absolute value
+        plt.hist(angle.cpu().numpy())
+        plt.title("Angle distribution step 3")
+        save_fig("angle_distribution_step_3.png")
+
+        # make sure there are no negative  or nan values
+        assert(torch.all(dist >= 0))                  , "dist should be non-negative"
+        assert(torch.all(angle >= 0))                 , "angle should be non-negative"
+        assert(torch.all(angle <= torch.pi))          , "angle should be less than pi"
+        assert(torch.all(torch.isfinite(dist)))       , "dist should be finite"
+        assert(torch.all(torch.isfinite(angle)))      , "angle should be finite"
+        assert(torch.all(torch.isnan(dist) == False)) , "dist should not be nan"
+        assert(torch.all(torch.isnan(angle) == False)), "angle should not"
+
+        # apply balancing epsilon
+        dist += self.epsilon
+        angle += self.epsilon
+
         # calculate weights
-        dist_weight  = 1 - dist  / torch.max(dist , dim=-1, keepdim=True)[0] # (SB, NS, B')
-        angle_weight = 1 - angle / torch.max(angle, dim=-1, keepdim=True)[0] # (SB, NS, B')
+        dist_weight  = 1 - dist  / torch.sum(dist , dim=-1, keepdim=True)[0] # (SB, NS, B')
+        angle_weight = 1 - angle / torch.sum(angle, dim=-1, keepdim=True)[0] # (SB, NS, B')
         weight = self.alpha * dist_weight + (1 - self.alpha) * angle_weight  # (SB, NS, B')
 
         # apply weights

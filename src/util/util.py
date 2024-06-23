@@ -8,6 +8,41 @@ import torch.nn.functional as F
 import functools
 import math
 import warnings
+import matplotlib.pyplot as plt
+import os
+import imageio
+
+
+def save_fig(fname,verbose=True,dpi="figure",folder = os.path.join(".","visuals")):
+    """
+    im sick of doing savefig(os.path.join(...)) clf close many times
+    dpi=600 is good for a plotting a single (100,500) image
+    """
+    if not os.path.exists(folder):
+        print("creating folder \"%s\""%folder)
+        os.mkdir(folder)
+    if verbose:
+        print("saving \"%s\"..."%fname)
+    plt.savefig(os.path.join(folder,fname),bbox_inches="tight",dpi=dpi)
+    plt.clf()
+    plt.close()
+
+
+def create_gif_from_pngs(header, folder_name=os.path.join(".","visuals"), frame_duration=.5):
+    """
+    writte by ChatGPT
+    Creates a GIF from all PNG files in the folder that start with the given header.
+    """
+    gif_path = os.path.join(folder_name, f"{header}.gif")
+    print("making \"%s\"..."%gif_path)
+    file_names = [file_name for file_name in os.listdir(folder_name) if file_name.startswith(header) and file_name.endswith(".png")]
+    file_names.sort()
+    images = [imageio.v2.imread(os.path.join(folder_name, file_name)) for file_name in file_names]
+    try:
+        imageio.mimsave(gif_path, images, duration=frame_duration)
+    except(ValueError):
+        print("WARNING: Cannot make \"%s\" because not all images are the same size.")
+
 
 
 def image_float_to_uint8(img):
