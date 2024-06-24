@@ -140,27 +140,22 @@ class CamDistanceAngleErrorCombiner(VanillaPixelnerfViewCombiner):
         t_s = src_poses[..., :3, 3:4]    # (SB, NS, 1 , 3, 1)
         t_t = target_poses[..., :3, 3:4] # (SB, 1 , B', 3, 1)
 
-        # calculate distance and angle
+        # calculate distance
         c_s = -R_s.permute(0, 1, 2, 4, 3) @ t_s # (SB, NS, 1 , 3, 1)
         c_t = -R_t.permute(0, 1, 2, 4, 3) @ t_t # (SB, 1 , B', 3, 1)
         dist = torch.norm(c_s - c_t, dim=-2)    # (SB, NS, B', 1)
         dist = dist[..., 0] # (SB, NS, B')
-        angle = torch.acos(torch.sum(R_s[...,2,:]*R_t[...,2,:], dim=-1)) # (SB, NS, B')
+
+        # calculate angle
+        a = R_s[..., 2, :] / torch.norm(R_s[..., 2, :], dim=-1, keepdim=True) * 0.5 # (SB, NS, 1 , 3)
+        b = R_t[..., 2, :] / torch.norm(R_t[..., 2, :], dim=-1, keepdim=True) * 0.5 # (SB, 1 , B', 3)
+        angle = torch.acos(torch.sum(a * b, dim=-1)) # (SB, NS, B')
+
 
         # place the angle in the range [0, pi]
-        print()
-        print("step 0 : min,max angle = (%.2f,%.2f)" % (angle.min(), angle.max()))
         angle = torch.remainder(angle, 2 * torch.pi)  # Step 1: Normalize to [0, 2*pi)
-        print("step 1 : min,max angle = (%.2f,%.2f)" % (angle.min(), angle.max()))
         angle[angle >= torch.pi] -= 2 * torch.pi      # Step 2: Adjust values >= pi to be in the range [-pi, pi)
-        print("step 2 : min,max angle = (%.2f,%.2f)" % (angle.min(), angle.max()))
         angle = torch.abs(angle)                      # Step 3: Take the absolute value
-        print("step 3 : min,max angle = (%.2f,%.2f)" % (angle.min(), angle.max()))
-
-        plt.hist(angle.flatten().cpu().numpy())
-        plt.title("Angular error distribution")
-        save_fig("angular_error_distribution.png")
-        print()
 
         # make sure there are no negative  or nan values
         assert(torch.all(torch.isfinite(dist)))       , "dist should be finite"
