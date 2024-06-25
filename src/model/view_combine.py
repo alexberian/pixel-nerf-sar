@@ -8,23 +8,21 @@ from .code import PositionalEncoding
 import torch.autograd.profiler as profiler
 
 
-def get_combine_module(combine_type, pixelnerfnet=None):
+def get_combine_module(combine_type, positional_encoder=None):
     """
     return a view combiner module based on the combine_type
     """
-
-
-    if "error" in combine_type:
-        return CamDistanceAngleErrorCombiner(alpha=float(combine_type.split("error")[1]), pixelnerfnet=pixelnerfnet)
-    if combine_type == "cross_attention":
-        return CrossAttentionCombiner(pixelnerfnet=pixelnerfnet)
-            
 
     combine_str_to_module = {
         "average": "VanillaPixelnerfViewCombiner",
         "max": "VanillaPixelnerfViewCombiner",
     }
-    if combine_type in combine_str_to_module:
+
+    if "error" in combine_type:
+        return CamDistanceAngleErrorCombiner(alpha=float(combine_type.split("error")[1]))
+    elif combine_type == "cross_attention":
+        return CrossAttentionCombiner(positional_encoder=positional_encoder)
+    elif combine_type in combine_str_to_module:
         return globals()[combine_str_to_module[combine_type]]()
     else:
         raise NotImplementedError("Unsupported combine type " + combine_type)
@@ -102,13 +100,13 @@ class CamDistanceAngleErrorCombiner(VanillaPixelnerfViewCombiner):
     Angle vs Distance are weighted by alpha, 1-alpha respectively.
     """
 
-    def __init__(self, alpha=0.5, epsilon=0.001, pixelnerfnet=None):
+    def __init__(self, alpha=0.5, epsilon=0.001, positional_encoder=None):
+        super().__init__()
         assert(alpha >= 0 and alpha <= 1.0), "alpha must be between [0, 1]"
         assert(epsilon >= 0), "epsilon must be non-negative"
         self.alpha = alpha
         self.epsilon = epsilon
-        self.pixelnerfnet = pixelnerfnet
-        super().__init__()
+        self.positional_encoder = positional_encoder
 
     def extract_useful_vars(self, x, src_poses, target_poses, combine_inner_dims):
         # reshape for broadcasting
@@ -243,8 +241,8 @@ class CrossAttentionCombiner(CamDistanceAngleErrorCombiner):
         d_t = d_t.reshape(SB, 1, Bp, 3, 1)
 
         # calculate queries and keys
-        coded_c_t = self.pixelnerfnet.code(c_t.reshape(-1,3)).reshape(SB, 1, Bp, 39, 1)
-        coded_c_s = self.pixelnerfnet.code(c_s.reshape(-1,3)).reshape(SB, NS, 1, 39, 1)
+        coded_c_t = self.positional_encoder(c_t.reshape(-1,3)).reshape(SB, 1, Bp, 39, 1)
+        coded_c_s = self.positional_encoder(c_s.reshape(-1,3)).reshape(SB, NS, 1, 39, 1)
         q = torch.cat([coded_c_t, d_t], dim=-2) # (SB, 1, B', 42, 1)
         k = torch.cat([coded_c_s, d_s], dim=-2) # (SB, NS, 1, 42, 1)
 
