@@ -78,9 +78,9 @@ class ResnetFC(nn.Module):
         d_hidden=128,
         beta=0.0,
         combine_layer=1000,
-        combine_type="error.5",
-        # combine_type="average",
+        combine_type="average",
         use_spade=False,
+        pixelnerfnet = None,
     ):
         """
         :param d_in input size
@@ -136,7 +136,8 @@ class ResnetFC(nn.Module):
         else:
             self.activation = nn.ReLU()
 
-        self.view_combiner = get_combine_module(self.combine_type)
+        self.pixelnerfnet = pixelnerfnet
+        self.view_combiner = get_combine_module(self.combine_type , pixelnerfnet=self.pixelnerfnet)
 
     def forward(self, zx, combine_inner_dims=(1,), combine_index=None, dim_size=None, image_feature = None, src_poses = None, target_poses = None):
         """
