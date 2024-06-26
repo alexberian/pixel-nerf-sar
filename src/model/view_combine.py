@@ -20,10 +20,16 @@ def get_combine_module(combine_type, positional_encoder=None):
 
     if "error" in combine_type:
         return CamDistanceAngleErrorCombiner(alpha=float(combine_type.split("error")[1]))
+
     elif combine_type == "cross_attention":
         return CrossAttentionCombiner(positional_encoder=positional_encoder)
+
+    elif combine_type == "learned_cross_attention":
+        return CrossAttentionCombiner(positional_encoder=positional_encoder, learned_attention=True)
+
     elif combine_type in combine_str_to_module:
         return globals()[combine_str_to_module[combine_type]]()
+
     else:
         raise NotImplementedError("Unsupported combine type " + combine_type)
 
@@ -100,13 +106,12 @@ class CamDistanceAngleErrorCombiner(VanillaPixelnerfViewCombiner):
     Angle vs Distance are weighted by alpha, 1-alpha respectively.
     """
 
-    def __init__(self, alpha=0.5, epsilon=0.001, positional_encoder=None):
+    def __init__(self, alpha=0.5, epsilon=0.001):
         super().__init__()
         assert(alpha >= 0 and alpha <= 1.0), "alpha must be between [0, 1]"
         assert(epsilon >= 0), "epsilon must be non-negative"
         self.alpha = alpha
         self.epsilon = epsilon
-        self.positional_encoder = positional_encoder
 
     def forward(self, x, combine_inner_dims, combine_type="average", src_poses=None, target_poses=None, **kwargs):
         """
@@ -136,7 +141,7 @@ class CamDistanceAngleErrorCombiner(VanillaPixelnerfViewCombiner):
         K = combine_inner_dims[1] // Bp
         H = x.shape[-1]
 
-        # extract rotation and camera center
+        # extract view direction and camera center
         R_s_T = src_poses[..., :3, :3]     # (SB, NS, 3, 3)
         R_t_T = target_poses[..., :3, :3]  # (SB, B', 3, 3)
         c_s = src_poses[..., :3, 3:4]      # (SB, NS, 3, 1)
@@ -191,13 +196,25 @@ class CamDistanceAngleErrorCombiner(VanillaPixelnerfViewCombiner):
 class CrossAttentionCombiner(CamDistanceAngleErrorCombiner):
     """
     Uses cross attention between target pose and source poses to calculate weights for combining source views.
-    No weights are learned, only the attention mechanism is used.
+    Has the option of using or not using learned weights.
 
     Query: encoded TARGET camera center concatenated with unencoded direction of view
     Key: encoded SOURCE camera center concatenated with unencoded direction of view
     Value: hidden state of the MLP for source views
     """
+    def __init__(self, positional_encoder=None, learned_attention = False, **kwargs):
+        super().__init__(**kwargs)
+
+        self.positional_encoder = positional_encoder
+        self.learned_attention = learned_attention
+
+        # initialize learned attention layers
+        if self.learned_attention:
+            self.attention_dim = self.positional_encoder.d_out + 3
+            self.query_layer = nn.Linear(self.attention_dim, self.attention_dim)
+            self.key_layer = nn.Linear(self.attention_dim, self.attention_dim)
         
+
     def forward(self, x, combine_inner_dims, combine_type="average", src_poses=None, target_poses=None, **kwargs):
         """
         x's shape is (SB*NS*B'*K,H)
@@ -230,21 +247,26 @@ class CrossAttentionCombiner(CamDistanceAngleErrorCombiner):
         c_t = target_poses[..., :3, 3]  # (SB, B', 3)
 
         # calculate queries and keys
-        coded_c_t = self.positional_encoder(c_t.reshape(-1,3)).reshape(SB, Bp, 39)
-        coded_c_s = self.positional_encoder(c_s.reshape(-1,3)).reshape(SB, NS, 39)
-        q = torch.cat([coded_c_t, d_t], dim=-1) # (SB, B', 42)
-        k = torch.cat([coded_c_s, d_s], dim=-1) # (SB, NS, 42)
+        coded_c_t = self.positional_encoder(c_t.reshape(-1,3)) # (SB*B', A-3) where A := self.attention_dim
+        coded_c_s = self.positional_encoder(c_s.reshape(-1,3)) # (SB*NS, A-3)
+        q = torch.cat([coded_c_t, d_t.reshape(-1,3)], dim=-1).reshape(SB,Bp,-1) # (SB, B', A)
+        k = torch.cat([coded_c_s, d_s.reshape(-1,3)], dim=-1).reshape(SB,NS,-1) # (SB, NS, A)
+
+        # use learned attention weights if needed
+        if self.learned_attention:
+            q = self.query_layer(q)
+            k = self.key_layer(k)
 
         # calculate attention weights
-        k_T = k.permute(0, 2, 1) # (SB, 42, NS)
-        Wp = q @ k_T # (SB, B', NS)
+        k_T = k.permute(0, 2, 1)      # (SB, A , NS)
+        Wp = q @ k_T                  # (SB, B', NS)
         W = torch.softmax(Wp, dim=-1) # (SB, B', NS)
-        W = W.permute(0, 2, 1) # (SB, NS, B')
+        W = W.permute(0, 2, 1)        # (SB, NS, B')
         
         # apply weights
         W = W.reshape(SB, NS, Bp, 1, 1)
         x = x.reshape(SB, NS, Bp, K, H)
-        x = x * W          # (SB, NS, B', K, H)
+        x = x * W               # (SB, NS, B', K, H)
         x = torch.sum(x, dim=1) # (SB, B', K, H)
 
         # reshape to expected output shape
