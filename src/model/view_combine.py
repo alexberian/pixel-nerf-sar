@@ -183,6 +183,7 @@ class CamDistanceAngleErrorCombiner(VanillaPixelnerfViewCombiner):
         x = x * weight          # (SB, NS, B', K, H)
         x = torch.sum(x, dim=1) # (SB, B', K, H)
 
+        # reshape to expected output shape
         x = x.reshape(SB, Bp*K, H)
         return x
 
@@ -229,14 +230,12 @@ class CrossAttentionCombiner(CamDistanceAngleErrorCombiner):
         c_t = target_poses[..., :3, 3]  # (SB, B', 3)
 
         # calculate queries and keys
-        coded_c_t = self.positional_encoder(c_t.reshape(-1,3)).reshape(SB, 1, Bp, 39, 1)
-        coded_c_s = self.positional_encoder(c_s.reshape(-1,3)).reshape(SB, NS, 1, 39, 1)
-        q = torch.cat([coded_c_t, d_t], dim=-2) # (SB, 1, B', 42, 1)
-        k = torch.cat([coded_c_s, d_s], dim=-2) # (SB, NS, 1, 42, 1)
+        coded_c_t = self.positional_encoder(c_t.reshape(-1,3)).reshape(SB, Bp, 39)
+        coded_c_s = self.positional_encoder(c_s.reshape(-1,3)).reshape(SB, NS, 39)
+        q = torch.cat([coded_c_t, d_t], dim=-1) # (SB, B', 42)
+        k = torch.cat([coded_c_s, d_s], dim=-1) # (SB, NS, 42)
 
         # calculate attention weights
-        q = q.reshape(SB, Bp, 42)
-        k = k.reshape(SB, NS, 42)
         k_T = k.permute(0, 2, 1) # (SB, 42, NS)
         Wp = q @ k_T # (SB, B', NS)
         W = torch.softmax(Wp, dim=-1) # (SB, B', NS)
@@ -248,13 +247,6 @@ class CrossAttentionCombiner(CamDistanceAngleErrorCombiner):
         x = x * W          # (SB, NS, B', K, H)
         x = torch.sum(x, dim=1) # (SB, B', K, H)
 
+        # reshape to expected output shape
         x = x.reshape(SB, Bp*K, H) # (SB, B*K, H)
         return x
-
-
-
-
-
-
-
-
