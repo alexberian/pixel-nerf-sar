@@ -1,7 +1,7 @@
 import sys
 from torch import nn
 import torch
-from util import plt, save_fig
+from util import plt, save_fig, combine_interleaved
 from .code import PositionalEncoding
 
 #  import torch_scatter
@@ -75,18 +75,6 @@ def calculate_relative_pose(src_poses, target_poses):
 
 class VanillaPixelnerfViewCombiner(nn.Module):
 
-    def combine_interleaved(self, t, inner_dims=(1,), agg_type="average"):
-        if len(inner_dims) == 1 and inner_dims[0] == 1:
-            return t
-        t = t.reshape(-1, *inner_dims, *t.shape[1:])
-        if agg_type == "average":
-            t = torch.mean(t, dim=1)
-        elif agg_type == "max":
-            t = torch.max(t, dim=1)[0]
-        else:
-            raise NotImplementedError("Unsupported combine type " + agg_type)
-        return t
-
     def forward(self, x, combine_inner_dims, combine_type="average", **kwargs):
         """
         :param x (..., d_hidden)
@@ -94,10 +82,10 @@ class VanillaPixelnerfViewCombiner(nn.Module):
         Tensor will be reshaped to (-1, combine_inner_dims, ...) and reduced using combine_type
         on dim 1
         """
-        return self.combine_interleaved(x, combine_inner_dims, combine_type)
+        return combine_interleaved(x, combine_inner_dims, combine_type)
 
 
-class CamDistanceAngleErrorCombiner(VanillaPixelnerfViewCombiner):
+class CamDistanceAngleErrorCombiner(nn.Module):
     """
     Weighs input views based on the distance and angle between the source and target views.
     source views that are closer to the target view are weighted more heavily. Angle is also
@@ -136,7 +124,7 @@ class CamDistanceAngleErrorCombiner(VanillaPixelnerfViewCombiner):
         # get shape information
         SB, NS, _, _ = src_poses.shape
         if NS == 1: # if only one source view, don't need to combine
-            return self.combine_interleaved(x, combine_inner_dims, "average")
+            return combine_interleaved(x, combine_inner_dims, "average")
         _, Bp, _, _ = target_poses.shape
         K = combine_inner_dims[1] // Bp
         H = x.shape[-1]
@@ -191,7 +179,7 @@ class CamDistanceAngleErrorCombiner(VanillaPixelnerfViewCombiner):
         return x
 
 
-class CrossAttentionCombiner(CamDistanceAngleErrorCombiner):
+class CrossAttentionCombiner(nn.Module):
     """
     Uses cross attention between target pose and source poses to calculate weights for combining source views.
     Has the option of using or not using learned weights.
@@ -233,7 +221,7 @@ class CrossAttentionCombiner(CamDistanceAngleErrorCombiner):
         # get shape information
         SB, NS, _, _ = src_poses.shape
         if NS == 1: # if only one source view, don't need to combine
-            return self.combine_interleaved(x, combine_inner_dims, "average")
+            return combine_interleaved(x, combine_inner_dims, "average")
         _, Bp, _, _ = target_poses.shape
         K = combine_inner_dims[1] // Bp
         H = x.shape[-1]
