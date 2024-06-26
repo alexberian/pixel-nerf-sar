@@ -108,26 +108,11 @@ class CamDistanceAngleErrorCombiner(VanillaPixelnerfViewCombiner):
         self.epsilon = epsilon
         self.positional_encoder = positional_encoder
 
-    def extract_useful_vars(self, x, src_poses, target_poses, combine_inner_dims):
-        # reshape for broadcasting
-        SB, NS, _, _ = src_poses.shape
-        if NS == 1: # if only one source view, don't need to combine
-            return super().forward(x, combine_inner_dims, "average")
-        _, Bp, _, _ = target_poses.shape
-        K = combine_inner_dims[1] // Bp
-        H = x.shape[-1]
-
-        # extracy rotation and translation
-        R_s = src_poses[..., :3, :3]     # (SB, NS, 1 , 3, 3)
-        R_t = target_poses[..., :3, :3]  # (SB, 1 , B', 3, 3)
-        t_s = src_poses[..., :3, 3:4]    # (SB, NS, 1 , 3, 1)
-        t_t = target_poses[..., :3, 3:4] # (SB, 1 , B', 3, 1)
-
-        return R_s, R_t, t_s, t_t, \
-               SB, NS, Bp, K, H
-
     def forward(self, x, combine_inner_dims, combine_type="average", src_poses=None, target_poses=None, **kwargs):
         """
+        poses are the srn_cars poses, not extrinsics
+        [R.T | c], not [R | t]
+
         x's shape is (SB*NS*B'*K,H)
         combine_inner_dims is (NS,B'*K)
 
@@ -143,26 +128,35 @@ class CamDistanceAngleErrorCombiner(VanillaPixelnerfViewCombiner):
         :param x (SB*NS*B'*K, H)
         :param combine_inner_dims tuple with (NS, B'*K)
         """
-
-        R_s, R_t, t_s, t_t, SB, NS, Bp, K, H = self.extract_useful_vars(x, src_poses, target_poses, combine_inner_dims)
-
-        # reshape for broadcasting
+        # get shape information
+        SB, NS, _, _ = src_poses.shape
         if NS == 1: # if only one source view, don't need to combine
-            return super().forward(x, combine_inner_dims, "average")
-        src_poses = src_poses.reshape(SB, NS, 1, 4, 4)
-        target_poses = target_poses.reshape(SB, 1, Bp, 4, 4)
+            return self.combine_interleaved(x, combine_inner_dims, "average")
+        _, Bp, _, _ = target_poses.shape
+        K = combine_inner_dims[1] // Bp
+        H = x.shape[-1]
+
+        # extract rotation and camera center
+        R_s_T = src_poses[..., :3, :3]     # (SB, NS, 3, 3)
+        R_t_T = target_poses[..., :3, :3]  # (SB, B', 3, 3)
+        c_s = src_poses[..., :3, 3:4]      # (SB, NS, 3, 1)
+        c_t = target_poses[..., :3, 3:4]   # (SB, B', 3, 1)
 
         # calculate distance
-        c_s = -R_s.permute(0, 1, 2, 4, 3) @ t_s # (SB, NS, 1 , 3, 1)
-        c_t = -R_t.permute(0, 1, 2, 4, 3) @ t_t # (SB, 1 , B', 3, 1)
-        dist = torch.norm(c_s - c_t, dim=-2)    # (SB, NS, B', 1)
-        dist = dist[..., 0] # (SB, NS, B')
+        a = c_s.reshape(SB, NS, 1, 3) # (SB, NS, 1 , 3)
+        b = c_t.reshape(SB, 1, Bp, 3) # (SB, 1 , B', 3)
+        c = a - b                     # (SB, NS, B', 3)
+        dist = torch.norm(c, dim=-1)  # (SB, NS, B')
 
         # calculate angle
-        a = R_s[..., 2, :] / torch.norm(R_s[..., 2, :], dim=-1, keepdim=True) * 0.5 # (SB, NS, 1 , 3)
-        b = R_t[..., 2, :] / torch.norm(R_t[..., 2, :], dim=-1, keepdim=True) * 0.5 # (SB, 1 , B', 3)
-        angle = torch.acos(torch.sum(a * b, dim=-1)) # (SB, NS, B')
-
+        a = R_s_T[...,:,2] # (SB, NS, 3)
+        b = R_t_T[...,:,2] # (SB, B', 3)
+        a /= 2*torch.norm(a, dim=-1, keepdim=True) # (SB, NS, 3)
+        b /= 2*torch.norm(b, dim=-1, keepdim=True) # (SB, B', 3)
+        a = a.reshape(SB, NS, 1, 3) # (SB, NS, 1, 3)
+        b = b.reshape(SB, 1, Bp, 3) # (SB, 1, B', 3)
+        c = a * b                   # (SB, NS, B', 3)
+        angle = torch.acos(torch.sum(c, dim=-1)) # (SB, NS, B')
 
         # place the angle in the range [0, pi]
         angle = torch.remainder(angle, 2 * torch.pi)  # Step 1: Normalize to [0, 2*pi)
@@ -178,31 +172,29 @@ class CamDistanceAngleErrorCombiner(VanillaPixelnerfViewCombiner):
         assert(torch.all(angle >= 0))                 , "angle should be non-negative"
         assert(torch.all(angle <= torch.pi))          , "angle should be less than pi"
 
-        # apply balancing epsilon
-        dist += self.epsilon
-        angle += self.epsilon
-
         # calculate weights
-        dist_weight  = 1 - dist  / torch.sum(dist , dim=-1, keepdim=True)[0] # (SB, NS, B')
-        angle_weight = 1 - angle / torch.sum(angle, dim=-1, keepdim=True)[0] # (SB, NS, B')
+        dist_weight  = torch.softmax(-dist , dim=1) # (SB, NS, B')
+        angle_weight = torch.softmax(-angle, dim=1) # (SB, NS, B')
         weight = self.alpha * dist_weight + (1 - self.alpha) * angle_weight  # (SB, NS, B')
 
         # apply weights
-        x = x.reshape(SB, NS, Bp, K, H)
         weight = weight.reshape(SB, NS, Bp, 1, 1)
+        x = x.reshape(SB, NS, Bp, K, H)
         x = x * weight          # (SB, NS, B', K, H)
         x = torch.sum(x, dim=1) # (SB, B', K, H)
+
         x = x.reshape(SB, Bp*K, H)
-
-        print("x.device: ", x.device)
-
         return x
 
 
 class CrossAttentionCombiner(CamDistanceAngleErrorCombiner):
     """
-    uses self attention of resnet hidden state x to combine views.
-    x has directional, positional, and hidden information in one embedding.
+    Uses cross attention between target pose and source poses to calculate weights for combining source views.
+    No weights are learned, only the attention mechanism is used.
+
+    Query: encoded TARGET camera center concatenated with unencoded direction of view
+    Key: encoded SOURCE camera center concatenated with unencoded direction of view
+    Value: hidden state of the MLP for source views
     """
         
     def forward(self, x, combine_inner_dims, combine_type="average", src_poses=None, target_poses=None, **kwargs):
@@ -222,23 +214,19 @@ class CrossAttentionCombiner(CamDistanceAngleErrorCombiner):
         :param x (SB*NS*B'*K, H)
         :param combine_inner_dims tuple with (NS, B'*K)
         """
-
-        R_s, R_t, t_s, t_t, SB, NS, Bp, K, H = self.extract_useful_vars(x, src_poses, target_poses, combine_inner_dims)
-
-        # reshape for broadcasting
+        # get shape information
+        SB, NS, _, _ = src_poses.shape
         if NS == 1: # if only one source view, don't need to combine
-            return super().forward(x, combine_inner_dims, "average")
-        src_poses = src_poses.reshape(SB, NS, 1, 4, 4)
-        target_poses = target_poses.reshape(SB, 1, Bp, 4, 4)
-        x = x.reshape(SB, NS, Bp, K, H)
+            return self.combine_interleaved(x, combine_inner_dims, "average")
+        _, Bp, _, _ = target_poses.shape
+        K = combine_inner_dims[1] // Bp
+        H = x.shape[-1]
 
-        # calculate camera centers and direction of view
-        c_s = -R_s.permute(0, 1, 2, 4, 3) @ t_s # (SB, NS, 1 , 3, 1)
-        c_t = -R_t.permute(0, 1, 2, 4, 3) @ t_t # (SB, 1 , B', 3, 1)
-        d_s = R_s[..., 2, :] / torch.norm(R_s[..., 2, :], dim=-1, keepdim=True) # (SB, NS, 1 , 3)
-        d_t = R_t[..., 2, :] / torch.norm(R_t[..., 2, :], dim=-1, keepdim=True) # (SB, B', 1 , 3)
-        d_s = d_s.reshape(SB, NS, 1, 3, 1)
-        d_t = d_t.reshape(SB, 1, Bp, 3, 1)
+        # get camera centers and directions of view
+        d_s = src_poses[..., :3, 2]     # (SB, NS, 3)
+        d_t = target_poses[..., :3, 2]  # (SB, B', 3)
+        c_s = src_poses[..., :3, 3]     # (SB, NS, 3)
+        c_t = target_poses[..., :3, 3]  # (SB, B', 3)
 
         # calculate queries and keys
         coded_c_t = self.positional_encoder(c_t.reshape(-1,3)).reshape(SB, 1, Bp, 39, 1)
@@ -251,15 +239,16 @@ class CrossAttentionCombiner(CamDistanceAngleErrorCombiner):
         k = k.reshape(SB, NS, 42)
         k_T = k.permute(0, 2, 1) # (SB, 42, NS)
         Wp = q @ k_T # (SB, B', NS)
-        W = torch.softmax(Wp, dim=-2) # (SB, B', NS)
+        W = torch.softmax(Wp, dim=-1) # (SB, B', NS)
         W = W.permute(0, 2, 1) # (SB, NS, B')
         
         # apply weights
         W = W.reshape(SB, NS, Bp, 1, 1)
+        x = x.reshape(SB, NS, Bp, K, H)
         x = x * W          # (SB, NS, B', K, H)
         x = torch.sum(x, dim=1) # (SB, B', K, H)
-        x = x.reshape(SB, Bp*K, H) # (SB, B*K, H)
 
+        x = x.reshape(SB, Bp*K, H) # (SB, B*K, H)
         return x
 
 
