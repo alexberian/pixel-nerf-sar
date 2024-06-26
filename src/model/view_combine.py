@@ -142,22 +142,20 @@ class CamDistanceAngleErrorCombiner(VanillaPixelnerfViewCombiner):
         H = x.shape[-1]
 
         # extract view direction and camera center
-        R_s_T = src_poses[..., :3, :3]     # (SB, NS, 3, 3)
-        R_t_T = target_poses[..., :3, :3]  # (SB, B', 3, 3)
-        c_s = src_poses[..., :3, 3:4]      # (SB, NS, 3, 1)
-        c_t = target_poses[..., :3, 3:4]   # (SB, B', 3, 1)
+        d_t = target_poses[..., :3, 2] # (SB, B', 3)
+        d_s = src_poses[..., :3, 2]    # (SB, NS, 3)
+        c_s = src_poses[..., :3, 3]    # (SB, NS, 3)
+        c_t = target_poses[..., :3, 3] # (SB, B', 3)
 
-        # calculate distance
+        # calculate relative distance
         a = c_s.reshape(SB, NS, 1, 3) # (SB, NS, 1 , 3)
         b = c_t.reshape(SB, 1, Bp, 3) # (SB, 1 , B', 3)
         c = a - b                     # (SB, NS, B', 3)
         dist = torch.norm(c, dim=-1)  # (SB, NS, B')
 
-        # calculate angle
-        a = R_s_T[...,:,2] # (SB, NS, 3)
-        b = R_t_T[...,:,2] # (SB, B', 3)
-        a /= 2*torch.norm(a, dim=-1, keepdim=True) # (SB, NS, 3)
-        b /= 2*torch.norm(b, dim=-1, keepdim=True) # (SB, B', 3)
+        # calculate relative angle
+        a = d_s/2*torch.norm(d_s, dim=-1, keepdim=True) # (SB, NS, 3)
+        b = d_t/2*torch.norm(d_t, dim=-1, keepdim=True) # (SB, B', 3)
         a = a.reshape(SB, NS, 1, 3) # (SB, NS, 1, 3)
         b = b.reshape(SB, 1, Bp, 3) # (SB, 1, B', 3)
         c = a * b                   # (SB, NS, B', 3)
