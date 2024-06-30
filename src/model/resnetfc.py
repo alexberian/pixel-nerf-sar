@@ -138,7 +138,7 @@ class ResnetFC(nn.Module):
 
         self.view_combiner = get_combine_module(self.combine_type , positional_encoder=positional_encoder)
 
-    def forward(self, zx, combine_inner_dims=(1,), combine_index=None, dim_size=None, image_feature = None, src_poses = None, target_poses = None):
+    def forward(self, zx, combine_inner_dims=(1,), combine_index=None, dim_size=None, image_feature = None, src_poses = None, target_poses = None, only_train_view_combiner = False):
         """
         :param zx (..., d_latent + d_in)
         :param combine_inner_dims Combining dimensions for use with multiview inputs.
@@ -185,6 +185,7 @@ class ResnetFC(nn.Module):
                         imag_feature = image_feature,
                         src_poses    = src_poses,
                         target_poses = target_poses,
+                        only_train_view_combiner = only_train_view_combiner,
                     )
 
                 if self.d_latent > 0 and blkid < self.combine_layer:

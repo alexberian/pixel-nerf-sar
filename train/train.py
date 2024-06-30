@@ -57,6 +57,12 @@ def extra_args(parser):
         default="average",
         help="How to combine multiview images within the MLP",
     )
+    parser.add_argument(
+        "--only_train_view_combiner",
+        action="store_true",
+        default=False,
+        help="Only train the view combiner part of the model",
+    )
     return parser
 
 
@@ -121,7 +127,7 @@ class PixelNeRFTrainer(trainlib.Trainer):
     def extra_save_state(self):
         torch.save(renderer.state_dict(), self.renderer_state_path)
 
-    def calc_losses(self, data, is_train=True, global_step=0):
+    def calc_losses(self, data, is_train=True, global_step=0, only_train_view_combiner=False):
         if "images" not in data:
             return {}
         all_images = data["images"].to(device=device)  # (SB, NV, 3, H, W)
@@ -203,17 +209,33 @@ class PixelNeRFTrainer(trainlib.Trainer):
 
         all_bboxes = all_poses = all_images = None
 
-        net.encode(
-            src_images,
-            src_poses, # (SB, NS, 4, 4)
-            all_focals.to(device=device),
-            c=all_c.to(device=device) if all_c is not None else None,
-            target_poses=all_target_poses, # (SB, ray_batch_size, 4, 4)
-        )
-        render_dict = DotMap( render_par(
-            all_rays, # (SB, ray_batch_size, 8)
-            want_weights=True,
-        ))
+        if only_train_view_combiner:
+            with torch.no_grad():
+                print('disabling gradients at the highest level of the model for view combine training.')
+                net.encode(
+                    src_images,
+                    src_poses, # (SB, NS, 4, 4)
+                    all_focals.to(device=device),
+                    c=all_c.to(device=device) if all_c is not None else None,
+                    target_poses=all_target_poses, # (SB, ray_batch_size, 4, 4)
+                    only_train_view_combiner = True,
+                )
+                render_dict = DotMap( render_par(
+                    all_rays, # (SB, ray_batch_size, 8)
+                    want_weights=True,
+                ))
+        else:
+            net.encode(
+                src_images,
+                src_poses, # (SB, NS, 4, 4)
+                all_focals.to(device=device),
+                c=all_c.to(device=device) if all_c is not None else None,
+                target_poses=all_target_poses, # (SB, ray_batch_size, 4, 4)
+            )
+            render_dict = DotMap( render_par(
+                all_rays, # (SB, ray_batch_size, 8)
+                want_weights=True,
+            ))
         coarse = render_dict.coarse
         fine = render_dict.fine
         using_fine = len(fine) > 0
@@ -235,7 +257,7 @@ class PixelNeRFTrainer(trainlib.Trainer):
         return loss_dict
 
     def train_step(self, data, global_step):
-        return self.calc_losses(data, is_train=True, global_step=global_step)
+        return self.calc_losses(data, is_train=True, global_step=global_step, only_train_view_combiner=args.only_train_view_combiner)
 
     def eval_step(self, data, global_step):
         renderer.eval()
