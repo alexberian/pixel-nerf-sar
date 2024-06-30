@@ -210,10 +210,12 @@ class PixelNeRFTrainer(trainlib.Trainer):
         all_bboxes = all_poses = all_images = None
 
         if only_train_view_combiner:
+            # Store original states
+            original_grad_state = {name: param.requires_grad for name, param in net.named_parameters()}
             # disable all gradients except for the ones in the view combiner
             for name, param in net.named_parameters():
-                print(name, param.requires_grad)
-
+                if "view_combiner" not in name:
+                    param.requires_grad = False
 
         net.encode(
             src_images,
@@ -243,6 +245,11 @@ class PixelNeRFTrainer(trainlib.Trainer):
         if is_train:
             loss.backward()
         loss_dict["t"] = loss.item()
+
+        if only_train_view_combiner:
+            # Restore original gradient states
+            for name, param in net.named_parameters():
+                param.requires_grad = original_grad_state[name]
 
         return loss_dict
 
