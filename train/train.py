@@ -210,32 +210,22 @@ class PixelNeRFTrainer(trainlib.Trainer):
         all_bboxes = all_poses = all_images = None
 
         if only_train_view_combiner:
-            with torch.no_grad():
-                print('disabling gradients at the highest level of the model for view combine training.')
-                net.encode(
-                    src_images,
-                    src_poses, # (SB, NS, 4, 4)
-                    all_focals.to(device=device),
-                    c=all_c.to(device=device) if all_c is not None else None,
-                    target_poses=all_target_poses, # (SB, ray_batch_size, 4, 4)
-                    only_train_view_combiner = True,
-                )
-                render_dict = DotMap( render_par(
-                    all_rays, # (SB, ray_batch_size, 8)
-                    want_weights=True,
-                ))
-        else:
-            net.encode(
-                src_images,
-                src_poses, # (SB, NS, 4, 4)
-                all_focals.to(device=device),
-                c=all_c.to(device=device) if all_c is not None else None,
-                target_poses=all_target_poses, # (SB, ray_batch_size, 4, 4)
-            )
-            render_dict = DotMap( render_par(
-                all_rays, # (SB, ray_batch_size, 8)
-                want_weights=True,
-            ))
+            # disable all gradients except for the ones in the view combiner
+            for name, param in net.named_parameters():
+                print(name, param.requires_grad)
+
+
+        net.encode(
+            src_images,
+            src_poses, # (SB, NS, 4, 4)
+            all_focals.to(device=device),
+            c=all_c.to(device=device) if all_c is not None else None,
+            target_poses=all_target_poses, # (SB, ray_batch_size, 4, 4)
+        )
+        render_dict = DotMap( render_par(
+            all_rays, # (SB, ray_batch_size, 8)
+            want_weights=True,
+        ))
         coarse = render_dict.coarse
         fine = render_dict.fine
         using_fine = len(fine) > 0
@@ -251,10 +241,6 @@ class PixelNeRFTrainer(trainlib.Trainer):
 
         loss = rgb_loss
         if is_train:
-            # debug
-            for name, param in net.named_parameters():
-                print(name, param.requires_grad)
-
             loss.backward()
         loss_dict["t"] = loss.item()
 

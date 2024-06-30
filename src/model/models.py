@@ -86,7 +86,7 @@ class PixelNeRFNet(torch.nn.Module):
         self.num_objs = 0
         self.num_views_per_obj = 1
 
-    def encode(self, images, poses, focal, z_bounds=None, c=None, target_poses=None, only_train_view_combiner = False,):
+    def encode(self, images, poses, focal, z_bounds=None, c=None, target_poses=None,):
         """
         :param images (NS, 3, H, W)
         NS is number of input (aka source or reference) views
@@ -95,13 +95,11 @@ class PixelNeRFNet(torch.nn.Module):
         :param z_bounds ignored argument (used in the past)
         :param c principal point None or () or (2) or (NS) or (NS, 2) [cx, cy],
         :param target_poses (SB, ray_batch_size, 4, 4) target poses for the views,
-        :param only_train_view_combiner if true, only train the view combine network, just set the internal variable only_train_view_combiner that gets passed to the mlp_coarse and mlp_fine
         default is center of image
         """
         # save source and target poses to the encoder
         self.encoder.src_poses = poses
         self.encoder.target_poses = target_poses
-        self.only_train_view_combiner = only_train_view_combiner
 
         self.num_objs = images.size(0)
         if len(images.shape) == 5:
@@ -255,7 +253,6 @@ class PixelNeRFNet(torch.nn.Module):
                     image_feature = self.encoder.image_feature,
                     src_poses = self.encoder.src_poses,
                     target_poses = self.encoder.target_poses,
-                    only_train_view_combiner = self.only_train_view_combiner,
                 )
             else:
                 mlp_output = self.mlp_fine(
@@ -266,7 +263,6 @@ class PixelNeRFNet(torch.nn.Module):
                     image_feature = self.encoder.image_feature,
                     src_poses = self.encoder.src_poses,
                     target_poses = self.encoder.target_poses,
-                    only_train_view_combiner = self.only_train_view_combiner,
                 )
 
             # Interpret the output

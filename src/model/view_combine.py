@@ -201,7 +201,7 @@ class CrossAttentionCombiner(nn.Module):
             self.key_layer = nn.Linear(self.attention_dim, self.attention_dim)
         
 
-    def forward(self, x, combine_inner_dims, combine_type="average", src_poses=None, target_poses=None, only_train_view_combiner = False, **kwargs):
+    def forward(self, x, combine_inner_dims, combine_type="average", src_poses=None, target_poses=None, **kwargs):
         """
         x's shape is (SB*NS*B'*K,H)
         combine_inner_dims is (NS,B'*K)
@@ -218,12 +218,6 @@ class CrossAttentionCombiner(nn.Module):
         :param x (SB*NS*B'*K, H)
         :param combine_inner_dims tuple with (NS, B'*K)
         """
-        # enable gradients if only_train_view_combiner is True
-        if only_train_view_combiner:
-            with torch.enable_grad():
-                print('enabling gradients for view combiner.')
-                return self.forward(x, combine_inner_dims, combine_type, src_poses, target_poses, only_train_view_combiner=False, **kwargs)
-                # neat recursive trick to enable gradients
 
         # get shape information
         SB, NS, _, _ = src_poses.shape
