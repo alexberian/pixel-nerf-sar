@@ -251,6 +251,10 @@ class PixelNeRFTrainer(trainlib.Trainer):
 
         loss = rgb_loss
         if is_train:
+            # debug
+            for name, param in net.named_parameters():
+                print(name, param.requires_grad)
+
             loss.backward()
         loss_dict["t"] = loss.item()
 
