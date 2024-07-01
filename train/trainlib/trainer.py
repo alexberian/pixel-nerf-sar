@@ -56,7 +56,7 @@ class Trainer:
         # Load weights
         self.managed_weight_saving = hasattr(net, "load_weights")
         if self.managed_weight_saving:
-            net.load_weights(self.args)
+            net.load_weights(self.args, strict=False) # setting strict to false because i added the view combiner
         self.iter_state_path = "%s/%s/_iter" % (
             self.args.checkpoints_path,
             self.args.name,

@@ -68,9 +68,13 @@ class PixelNeRFNet(torch.nn.Module):
         d_out = 4
 
         self.latent_size = self.encoder.latent_size
-        self.mlp_coarse = make_mlp(conf["mlp_coarse"], d_in, d_latent, d_out=d_out, combine_type=combine_type, positional_encoder = self.code)
+        self.mlp_coarse = make_mlp(
+            conf["mlp_coarse"], d_in, d_latent, d_out=d_out,                   combine_type=combine_type, 
+            positional_encoder = PositionalEncoding.from_conf(conf["code"], d_in=d_in),
+        )
         self.mlp_fine = make_mlp(
-            conf["mlp_fine"], d_in, d_latent, d_out=d_out, allow_empty=True, combine_type = combine_type, positional_encoder = self.code, 
+            conf["mlp_fine"]  , d_in, d_latent, d_out=d_out, allow_empty=True, combine_type=combine_type, 
+            positional_encoder = PositionalEncoding.from_conf(conf["code"], d_in=d_in), 
         )
         # Note: this is world -> camera, and bottom row is omitted
         self.register_buffer("poses", torch.empty(1, 3, 4), persistent=False)
