@@ -44,8 +44,17 @@ class Trainer:
 
         os.makedirs(self.summary_path, exist_ok=True)
 
+        # only train view combiner if specified
+        if args.only_train_view_combiner:
+            trained_params = []
+            for name, param in net.named_parameters():
+                if "view_combiner" in name:
+                    trained_params.append(param)
+        else:
+            trained_params = net.parameters()
+        
         # Currently only Adam supported
-        self.optim = torch.optim.Adam(net.parameters(), lr=args.lr)
+        self.optim = torch.optim.Adam(trained_params, lr=args.lr)
         if args.gamma != 1.0:
             self.lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(
                 optimizer=self.optim, gamma=args.gamma

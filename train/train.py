@@ -149,7 +149,7 @@ class PixelNeRFTrainer(trainlib.Trainer):
     def extra_save_state(self):
         torch.save(renderer.state_dict(), self.renderer_state_path)
 
-    def calc_losses(self, data, is_train=True, global_step=0, only_train_view_combiner=False):
+    def calc_losses(self, data, is_train=True, global_step=0):
         if "images" not in data:
             return {}
         all_images = data["images"].to(device=device)  # (SB, NV, 3, H, W)
@@ -231,14 +231,6 @@ class PixelNeRFTrainer(trainlib.Trainer):
 
         all_bboxes = all_poses = all_images = None
 
-        if only_train_view_combiner:
-            # Store original states
-            original_grad_state = {name: param.requires_grad for name, param in net.named_parameters()}
-            # disable all gradients except for the ones in the view combiner
-            for name, param in net.named_parameters():
-                if "view_combiner" not in name:
-                    param.requires_grad = False
-
         # forward pass
         net.encode(
             src_images,
@@ -270,15 +262,10 @@ class PixelNeRFTrainer(trainlib.Trainer):
             loss.backward()
         loss_dict["t"] = loss.item()
 
-        # Restore original gradient states when only training the view combiner
-        if only_train_view_combiner:
-            for name, param in net.named_parameters():
-                param.requires_grad = original_grad_state[name]
-
         return loss_dict
 
     def train_step(self, data, global_step):
-        return self.calc_losses(data, is_train=True, global_step=global_step, only_train_view_combiner=args.only_train_view_combiner)
+        return self.calc_losses(data, is_train=True, global_step=global_step)
 
     def eval_step(self, data, global_step):
         renderer.eval()

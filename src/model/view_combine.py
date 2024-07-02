@@ -197,8 +197,8 @@ class CrossAttentionCombiner(nn.Module):
         # initialize learned attention layers
         if self.learned_attention:
             self.attention_dim = self.positional_encoder.d_out + 3
-            self.query_layer = nn.Linear(self.attention_dim, self.attention_dim)
-            self.key_layer = nn.Linear(self.attention_dim, self.attention_dim)
+            self.query_layer = nn.Linear(self.attention_dim, self.attention_dim, bias=False)
+            self.key_layer = nn.Linear(self.attention_dim, self.attention_dim, bias=False)
         
 
     def forward(self, x, combine_inner_dims, combine_type="average", src_poses=None, target_poses=None, **kwargs):
@@ -241,8 +241,6 @@ class CrossAttentionCombiner(nn.Module):
 
         # use learned attention weights if needed
         if self.learned_attention:
-            print("self.query_layer.weight: ", self.query_layer.weight)
-            print("self.query_layer.bias: ", self.query_layer.bias)
             q = self.query_layer(q)
             k = self.key_layer(k)
 
