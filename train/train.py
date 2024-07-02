@@ -239,6 +239,7 @@ class PixelNeRFTrainer(trainlib.Trainer):
                 if "view_combiner" not in name:
                     param.requires_grad = False
 
+        # forward pass
         net.encode(
             src_images,
             src_poses, # (SB, NS, 4, 4)
@@ -250,6 +251,7 @@ class PixelNeRFTrainer(trainlib.Trainer):
             all_rays, # (SB, ray_batch_size, 8)
             want_weights=True,
         ))
+
         coarse = render_dict.coarse
         fine = render_dict.fine
         using_fine = len(fine) > 0
@@ -268,8 +270,8 @@ class PixelNeRFTrainer(trainlib.Trainer):
             loss.backward()
         loss_dict["t"] = loss.item()
 
+        # Restore original gradient states when only training the view combiner
         if only_train_view_combiner:
-            # Restore original gradient states
             for name, param in net.named_parameters():
                 param.requires_grad = original_grad_state[name]
 

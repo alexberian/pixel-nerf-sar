@@ -299,9 +299,27 @@ class PixelNeRFNet(torch.nn.Module):
 
         if os.path.exists(model_path):
             print("Load", model_path)
-            self.load_state_dict(
-                torch.load(model_path, map_location=device), strict=strict
-            )
+            
+            # try to load the model, if that fails, print a warning and try again with strict=False
+            try:
+                self.load_state_dict(
+                    torch.load(model_path, map_location=device), strict=strict
+                )
+            except:
+                warnings.warn(
+                    (
+                        "WARNING: {} failed to load. Trying again with strict=False.\n"
+                        + "If you are trying to load a pretrained model, STOP since it's not in the right place. "
+                        + "If training, unless you are starting a new experiment, please remember to pass --resume. "
+                        + "Additionally this may be due to loading a model with a different architecture (i.e. a learned view combiner being present or not present in the weights file)."
+
+                    ).format(model_path)
+                )
+                self.load_state_dict(
+                    torch.load(model_path, map_location=device
+                    ),
+                    strict=False,
+                )
         elif not opt_init:
             warnings.warn(
                 (

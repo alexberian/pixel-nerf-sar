@@ -16,6 +16,6 @@ $PYTHONSTR  \
     --nviews='1 2 3' \
     --combine_type='learned_cross_attention' \
     --resume \
+    --only_train_view_combiner \
     # --combine_type='average' \
-    # --only_train_view_combiner \
 
