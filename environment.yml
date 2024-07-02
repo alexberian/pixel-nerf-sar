@@ -2,7 +2,7 @@
 name: pixelnerf
 channels:
   - pytorch
-  - defaults
+  - nvidia
 dependencies:
   - python>=3.8
   - pip

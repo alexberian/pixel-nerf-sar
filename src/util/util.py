@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import torch
+import torch.cuda
 from torchvision import transforms
 from torch import nn
 from torch.nn import init
@@ -230,11 +231,11 @@ def get_cuda(gpu_id):
     Get a torch.device for GPU gpu_id. If GPU not available,
     returns CPU device.
     """
-    return (
-        torch.device("cuda:%d" % gpu_id)
-        if torch.cuda.is_available()
-        else torch.device("cpu")
-    )
+    if torch.cuda.is_available():
+        return torch.device("cuda:%d" % gpu_id)
+    else:
+        print("CUDA not available, using CPU")
+        return torch.device("cpu")
 
 
 def masked_sample(masks, num_pix, prop_inside, thresh=0.5):
