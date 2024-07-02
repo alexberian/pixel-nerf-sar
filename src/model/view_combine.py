@@ -241,6 +241,8 @@ class CrossAttentionCombiner(nn.Module):
 
         # use learned attention weights if needed
         if self.learned_attention:
+            print("self.query_layer.weight: ", self.query_layer.weight)
+            print("self.query_layer.bias: ", self.query_layer.bias)
             q = self.query_layer(q)
             k = self.key_layer(k)
 
