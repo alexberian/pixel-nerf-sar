@@ -1,9 +1,21 @@
 # /workspace/berian/public/miniconda3/envs/edm/bin/python train/train.py -n srn_car_exp -c conf/exp/srn.conf -D /workspace/data/srncars/cars --gpu_id='7' --nviews='1 2 3' --combine_type='cross_attention'
+if test -f /workspace/berian/public/miniconda3/envs/edm/bin/python; then
+	PYTHONSTR="/workspace/berian/public/miniconda3/envs/edm/bin/python"
+	DATASTR="/workspace/data/srncars/cars"
+	GPUSTR="6"
+fi
+if test -f /home/berian/miniconda3/envs/pixelnerf/bin/python; then
+	PYTHONSTR="/home/berian/miniconda3/envs/pixelnerf/bin/python"
+	DATASTR="/home/berian/Documents/shapenet/cars"
+	GPUSTR="0"
+fi
 
-/workspace/berian/public/miniconda3/envs/edm/bin/python  \
+$PYTHONSTR  \
     train/train.py -n srn_car_exp -c conf/exp/srn.conf \
-    -D /workspace/data/srncars/cars --gpu_id='6' \
+    -D $DATASTR --gpu_id='0' \
     --nviews='1 2 3' \
     --combine_type='learned_cross_attention' \
-    --only_train_view_combiner \
     --resume \
+    # --combine_type='average' \
+    # --only_train_view_combiner \
+

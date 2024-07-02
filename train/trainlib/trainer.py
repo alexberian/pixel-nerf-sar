@@ -56,7 +56,7 @@ class Trainer:
         # Load weights
         self.managed_weight_saving = hasattr(net, "load_weights")
         if self.managed_weight_saving:
-            net.load_weights(self.args, strict=False) # setting strict to false because i added the view combiner
+            net.load_weights(self.args)
         self.iter_state_path = "%s/%s/_iter" % (
             self.args.checkpoints_path,
             self.args.name,
@@ -78,7 +78,7 @@ class Trainer:
             if os.path.exists(self.optim_state_path):
                 try:
                     self.optim.load_state_dict(
-                        torch.load(self.optim_state_path, map_location=device)
+                        torch.load(self.optim_state_path, map_location=device),
                     )
                 except:
                     warnings.warn(
