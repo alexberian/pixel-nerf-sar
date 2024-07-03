@@ -4,8 +4,8 @@ if test -f /workspace/berian/public/miniconda3/envs/edm/bin/python; then
 	DATASTR="/workspace/data/srncars/cars"
 	GPUSTR="6"
 fi
-if test -f /home/berian/miniconda3/envs/pixelnerf/bin/python; then
-	PYTHONSTR="/home/berian/miniconda3/envs/pixelnerf/bin/python"
+if test -f /home/berian/miniconda3/envs/seed/bin/python; then
+	PYTHONSTR="/home/berian/miniconda3/envs/seed/bin/python"
 	DATASTR="/home/berian/Documents/shapenet/cars"
 	GPUSTR="0"
 fi
