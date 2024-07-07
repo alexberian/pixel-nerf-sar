@@ -85,6 +85,12 @@ def extra_args(parser):
         action="store_true",
         help="Set to indicate poses may change between objects. In most of our datasets, the test set has fixed poses.",
     )
+    parser.add_argument(
+        "--combine_type",
+        type=str,
+        default="average",
+        help="How to combine multiview images within the MLP",
+    )
     return parser
 
 
@@ -132,7 +138,7 @@ if has_output:
     print("Writing images to", output_dir)
 
 
-net = make_model(conf["model"]).to(device=device).load_weights(args)
+net = make_model(conf["model"], combine_type=args.combine_type).to(device=device).load_weights(args)
 renderer = NeRFRenderer.from_conf(
     conf["renderer"], lindisp=dset.lindisp, eval_batch_size=args.ray_batch_size
 ).to(device=device)
@@ -257,23 +263,30 @@ with torch.no_grad():
                 .reshape(-1, 8)
                 .to(device=device)
             )  # ((NV[-NS])*H*W, 8)
+            all_target_poses = poses.to(device)
+            all_target_poses = all_target_poses.unsqueeze(1).repeat(1, 128*128, 1, 1)  # (SB, 128*128, 4, 4)
+            all_target_poses = all_target_poses.reshape(1, -1, 4, 4)  # (1, ray_batch_size, 4, 4)
 
             poses = None
             focal = focal.to(device=device)
 
         rays_spl = torch.split(all_rays, args.ray_batch_size, dim=0)  # Creates views
+        poses_spl = torch.split(all_target_poses, args.ray_batch_size, dim=1)
+        assert len(rays_spl) == len(poses_spl)
 
         n_gen_views = len(novel_view_idxs)
 
-        net.encode(
-            images[src_view_mask].to(device=device).unsqueeze(0),
-            src_poses.unsqueeze(0),
-            focal,
-            c=c,
-        )
-
         all_rgb, all_depth = [], []
+        i = 0
         for rays in tqdm.tqdm(rays_spl):
+            net.encode(
+                images[src_view_mask].to(device=device).unsqueeze(0),
+                src_poses.unsqueeze(0),
+                focal,
+                c=c,
+                target_poses=poses_spl[i],  # (1, ray_batch_size, 4, 4)
+            )
+            i += 1
             rgb, depth = render_par(rays[None])
             rgb = rgb[0].cpu()
             depth = depth[0].cpu()
