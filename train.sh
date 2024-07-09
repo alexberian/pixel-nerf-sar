@@ -14,7 +14,7 @@ $PYTHONSTR  \
     train/train.py -n srn_car_exp -c conf/exp/srn.conf \
     -D $DATASTR --gpu_id='0' \
     --nviews='1 2 3' \
-    --combine_type='learned_cross_attention' \
+    --combine_type='relative_pose_self_attention' \
     --resume \
     --only_train_view_combiner \
     # --combine_type='average' \
