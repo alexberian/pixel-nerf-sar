@@ -382,6 +382,8 @@ class RelativePoseSelfAttentionCombiner(nn.Module):
         vectors = vectors.reshape(-1,self.attention_dim) # (SB*NS*B', A)
         vectors = self.multihead_attention(vectors, vectors, vectors, need_weights = False)[0] # (SB*NS*B', A)
         weight  = self.weight_calculation_layer(vectors) # (SB*NS*B', 1)
+        weight = weight.reshape(SB, NS, Bp) # (SB, NS, B')
+        weight = torch.softmax(weight, dim=1) # (SB, NS, B')
 
         # apply weights
         W = weight.reshape(SB, NS, Bp, 1, 1)
