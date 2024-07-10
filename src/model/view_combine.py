@@ -379,14 +379,15 @@ class RelativePoseSelfAttentionCombiner(nn.Module):
         vectors = torch.cat([coded_c_r, d_r.reshape(-1,3)], dim=-1).reshape(SB,NS,Bp,-1) # (SB, NS, B', A)
 
         # apply attention
-        vectors = vectors.reshape(-1,self.attention_dim) # (SB*NS*B', A)
-        vectors = self.multihead_attention(vectors, vectors, vectors, need_weights = False)[0] # (SB*NS*B', A)
-        weight  = self.weight_calculation_layer(vectors) # (SB*NS*B', 1)
-        weight = weight.reshape(SB, NS, Bp) # (SB, NS, B')
-        weight = torch.softmax(weight, dim=1) # (SB, NS, B')
+        vectors = vectors.permute(0, 2, 1, 3) # (SB, B', NS, A)
+        vectors = vectors.reshape(-1, NS, self.attention_dim) # (SB*B', NS, A)
+        vectors_with_attention = self.multihead_attention(vectors, vectors, vectors, need_weights = False)[0] # (SB*B', NS, A)
+        weight  = self.weight_calculation_layer(vectors_with_attention) # (SB*B', NS, 1)
+        weight = torch.softmax(weight, dim=1) # (SB*B', NS, 1)
 
         # apply weights
-        W = weight.reshape(SB, NS, Bp, 1, 1)
+        W = weight.reshape(SB, Bp, NS, 1, 1)
+        W = W.permute(0, 2, 1, 3, 4) # (SB, NS, B', 1, 1)
         x = x.reshape(SB, NS, Bp, K, H)
         x = x * W  # (SB, NS, B', K, H)
         x = torch.sum(x, dim=1) # (SB, B', K, H)
