@@ -22,4 +22,4 @@ __pycache__/
 checkpoints/
 visuals/
 logs/
-eval/eval/
+eval/eval*/

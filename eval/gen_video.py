@@ -56,6 +56,12 @@ def extra_args(parser):
         default=0.0,
         help="Distance of camera from origin, default is average of z_far, z_near of dataset (only for non-DTU)",
     )
+    parser.add_argument(
+        "--combine_type",
+        type=str,
+        default="average",
+        help="How to combine multiview images within the MLP",
+    )
     parser.add_argument("--fps", type=int, default=30, help="FPS of video")
     return parser
 
@@ -100,8 +106,7 @@ if args.scale != 1.0:
         )
     H, W = Ht, Wt
 
-net = make_model(conf["model"]).to(device=device)
-net.load_weights(args)
+net = make_model(conf["model"], combine_type=args.combine_type).to(device=device).load_weights(args)
 
 renderer = NeRFRenderer.from_conf(
     conf["renderer"], lindisp=dset.lindisp, eval_batch_size=args.ray_batch_size,
@@ -181,6 +186,9 @@ render_rays = util.gen_rays(
     c=c * args.scale if c is not None else None,
 ).to(device=device)
 # (NV, H, W, 8)
+all_target_poses = render_poses.to(device)
+all_target_poses = all_target_poses.unsqueeze(1).repeat(1, 128*128, 1, 1)  # (SB, 128*128, 4, 4)
+all_target_poses = all_target_poses.reshape(1, -1, 4, 4)  # (1, ray_batch_size, 4, 4)
 
 focal = focal.to(device=device)
 
@@ -201,18 +209,22 @@ with torch.no_grad():
     else:
         src_view = source
 
-    net.encode(
-        images[src_view].unsqueeze(0),
-        poses[src_view].unsqueeze(0).to(device=device),
-        focal,
-        c=c,
-    )
 
     print("Rendering", args.num_views * H * W, "rays")
     all_rgb_fine = []
-    for rays in tqdm.tqdm(
-        torch.split(render_rays.view(-1, 8), args.ray_batch_size, dim=0)
-    ):
+    rays_spl = torch.split(render_rays.view(-1, 8), args.ray_batch_size, dim=0)
+    poses_spl = torch.split(all_target_poses, args.ray_batch_size, dim=1)
+    assert len(rays_spl) == len(poses_spl)
+    i = 0
+    for rays in tqdm.tqdm(rays_spl):
+        net.encode(
+            images[src_view].unsqueeze(0),
+            poses[src_view].unsqueeze(0).to(device=device),
+            focal,
+            c=c,
+            target_poses=poses_spl[i], # (1, ray_batch_size, 4, 4)
+        )
+        i += 1
         rgb, _depth = render_par(rays[None])
         all_rgb_fine.append(rgb[0])
     _depth = None
