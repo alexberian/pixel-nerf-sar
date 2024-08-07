@@ -31,9 +31,6 @@ def get_combine_module(combine_type, positional_encoder=None):
     elif combine_type == "relative_pose_self_attention":
         return RelativePoseSelfAttentionCombiner(positional_encoder=positional_encoder)
 
-    elif combine_type == "relative_pose_cross_attention":
-        return RelativePoseCrossAttentionCombiner(positional_encoder=positional_encoder)
-
     elif combine_type in combine_str_to_module:
         return combine_str_to_module[combine_type]()
 
@@ -232,86 +229,6 @@ class CrossAttentionCombiner(nn.Module):
 
 
 
-# class RelativePoseCrossAttentionCombiner(nn.Module):
-#     """
-#     Uses self attention on the relative poses using pytorch's multihead attention.
-#     """
-#     def __init__(self, positional_encoder=None, num_heads = 1, **kwargs):
-#         super().__init__(**kwargs)
-# 
-#         self.positional_encoder = positional_encoder
-#         self.attention_dim = self.positional_encoder.d_out + 3
-#         
-#         # initialize learned attention layers
-#         self.key_layer = nn.Linear(self.attention_dim, self.attention_dim, bias=False) # (A, A)
-#         self.query_vector = nn.Parameter(torch.randn(self.attention_dim)) # (A,)
-# 
-#     def forward( self,
-#                  x,
-#                  combine_inner_dims,
-#                  combine_type="average",
-#                  src_poses=None,
-#                  target_poses=None,
-#                  **kwargs,
-#     ):
-#         """
-#         x's shape is (SB*NS*B'*K,H)
-#         combine_inner_dims is (NS,B'*K)
-# 
-#         SB = number of objects
-#         NS = number of source views per object
-#         B' = number of target rays per object
-#         K  = number of points per ray
-#         B  = B' * K
-#         H  = hidden dimension of the mlp
-#         
-#         :param src_poses (SB, NS, 4, 4) source poses
-#         :param target_poses (SB, B', 4, 4) target poses
-#         :param x (SB*NS*B'*K, H)
-#         :param combine_inner_dims tuple with (NS, B'*K)
-#         """
-# 
-#         # get shape information
-#         SB, NS, _, _ = src_poses.shape
-#         if NS == 1: # if only one source view, don't need to combine
-#             return combine_interleaved(x, combine_inner_dims, "average")
-#         _, Bp, _, _ = target_poses.shape
-#         K = combine_inner_dims[1] // Bp
-#         H = x.shape[-1]
-# 
-#         # calculate relative poses
-#         relative_source_poses = torch.linalg.inv(src_poses).reshape(SB,NS,1,4,4) \
-#                                 @ target_poses.reshape(SB,1,Bp,4,4)
-#         # (SB, NS, B', 4, 4)
-#         
-# 
-#         # get camera centers and directions of view
-#         c_r = relative_source_poses[..., :3, 3] # (SB, NS, B', 3)
-#         d_r = relative_source_poses[..., :3, 2] # (SB, NS, B', 3)
-# 
-#         # create the key and query vectors for attention
-#         coded_c_r = self.positional_encoder(c_r.reshape(-1,3)) # (SB*NS*B', A-3) where A := self.attention_dim
-#         keys = torch.cat([coded_c_r, d_r.reshape(-1,3)], dim=-1).reshape(SB,NS,Bp,-1) # (SB, NS, B', A)
-# 
-#         # apply attention
-#         keys = self.key_layer(keys) # (SB, NS, B', A)
-#         keys = keys.permute(0, 2, 1, 3) # (SB, B', NS, A)
-#         query = self.query_vector.reshape(1,1,self.attention_dim,1) # (1,1,A,1)
-#         Wp = keys @ query # (SB, B', NS, 1)
-#         W = torch.softmax(Wp, dim=2) # (SB, B', NS, 1)
-#         W = W.permute(0, 2, 1, 3) # (SB, NS, B', 1)
-#         
-#         
-#         # apply weights
-#         W = W.reshape(SB, NS, Bp, 1, 1)
-#         x = x.reshape(SB, NS, Bp, K, H)
-#         x = x * W  # (SB, NS, B', K, H)
-#         x = torch.sum(x, dim=1) # (SB, B', K, H)
-# 
-#         # reshape to expected output shape
-#         x = x.reshape(SB, Bp*K, H) # (SB, B*K, H)
-#         return x
-
 
 
 
@@ -322,6 +239,7 @@ class RelativePoseSelfAttentionCombiner(nn.Module):
     def __init__(self, positional_encoder=None, num_heads = 1, **kwargs):
         super().__init__(**kwargs)
 
+        print("positional_encoder.", positional_encoder)
         self.positional_encoder = positional_encoder
         self.attention_dim = self.positional_encoder.d_out + 3
         
