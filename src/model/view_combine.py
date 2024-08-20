@@ -311,5 +311,5 @@ class RelativePoseSelfAttentionCombiner(nn.Module):
         x = torch.sum(x, dim=1) # (SB, B', K, H)
 
         # reshape to expected output shape
-        x = x.reshape(SB, Bp*K, H) # (SB, B*K, H)
+        x = x.reshape(SB, Bp*K, H) # (SB, B'*K, H)
         return x

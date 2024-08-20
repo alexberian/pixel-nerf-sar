@@ -6,9 +6,9 @@ from torch import nn
 import numpy as np
 import torch.autograd.profiler as profiler
 
-def cam_weighting(method_name, input_poses, target_poses, **dummykwargs):
+def cam_weighting(method_name, input_poses, target_poses):
     """
-    Dispatch method for all the camera weighting algorithms.
+    Dispatch method for all the deterministic camera weighting algorithms.
 
     Args:
         method_name (str): which camera weighting algorithm to use
@@ -232,25 +232,6 @@ def distance_cubed(input_poses, target_pose):
 # Attention based camera weighting algorithms #
 ###############################################
 
-def create_cam_weighting_object(method_name):
-    """
-    returns the camera weighting object based on the method name
-    """
-
-    if "attention" in method_name:
-        if method_name == "cross_attention":
-            return CrossAttentionCamWeighter(learned_attention = False)
-
-        elif method_name == "learned_cross_attention":
-            return CrossAttentionCamWeighter(learned_attention = True)
-
-        elif method_name == "relative_pose_self_attention":
-            return RelativePoseSelfAttentionCamWeighter()
-
-        else:
-            raise ValueError(f"attention based camera weighting algorithm {method_name} not implemented")
-    else:
-        return DeterministicCamWeighter(method_name)
 
     
 
@@ -265,6 +246,7 @@ class DeterministicCamWeighter(nn.Module):
     def forward(self, input_poses, target_poses):
         with profiler.record_function("deterministic_cam_weighting"):
             return cam_weighting(self.method_name, input_poses, target_poses)
+
 
 
 
@@ -321,17 +303,18 @@ class PositionalEncoding(torch.nn.Module):
 
 
 
+
 class PrincipalRayCameraEmbedder(nn.Module):
     """
-    Uses the pincipal axis direction and camera center concatenated to create 
-    the embedding of a camera pose matrix. Then a single dense layer is used to
-    create the final embedding.
+    Uses a positionally encoded camera center and unencoded principal axis direction
+    concatenated to create the embedding of a camera pose matrix. Then a single
+    dense layer is used to create the final embedding.
     """
     def __init__(
             self,
             num_freqs = 6,
             freq_factor = 1.5,
-            num_linear_layers = 0,
+            num_linear_layers = 1,
             embed_dim = 128,
             activation = nn.ReLU(),
             **kwargs,
@@ -339,7 +322,11 @@ class PrincipalRayCameraEmbedder(nn.Module):
         super().__init__(**kwargs)
 
         # define stuff
-        self.positional_encoder = PositionalEncoding(num_freqs=num_freqs, d_in=3, freq_factor=freq_factor, include_input=True)
+        self.positional_encoder = PositionalEncoding( num_freqs=num_freqs,
+                                                      d_in=3,
+                                                      freq_factor=freq_factor,
+                                                      include_input=True
+                                                    )
         self.activation = activation
 
         # create the linear layers
@@ -382,6 +369,52 @@ class PrincipalRayCameraEmbedder(nn.Module):
                 x = self.activation(x)
 
             return x.reshape(*shape_prefix, self.embed_dim)
+
+
+
+
+class SimpleMLPEmbedder(nn.Module):
+    """
+    Uses a simple MLP to embed the camera pose matrices.
+    """
+    def __init__(self, num_linear_layers = 2, embed_dim = 128, activation = nn.ReLU(), **kwargs):
+        super().__init__(**kwargs)
+
+        assert(num_linear_layers > 0), "num_linear_layers must be greater than 0."
+
+        # define stuff
+        self.activation = activation
+
+        # create the linear layers
+        self.linear_layers = nn.ModuleList()
+        for i in range(num_linear_layers):
+            in_dim = embed_dim
+            if i == 0:
+                in_dim = 12
+            new_layer = nn.Linear(in_dim, embed_dim)
+            self.linear_layers.append(new_layer)
+        
+        # set define embed dim of this embedder
+        self.embed_dim = embed_dim
+
+
+    def forward(self, camera_matrices):
+        """
+        camera_matrices (..., 4, 4) camera matrices
+        returns embeddings (..., embed_dim) embeddings of the poses
+        """
+        # remove the last row of the camera matrices
+        shape_prefix = camera_matrices.shape[:-2] # the ... part of the shape
+        camera_matrices = camera_matrices[..., :3, :].reshape(-1, 12) # (B, 12)
+
+        # calculate the embeddings
+        x = camera_matrices
+        for layer in self.linear_layers:
+            x = layer(x)
+            x = self.activation(x)
+
+        # reshape and return
+        return x.reshape(*shape_prefix, self.embed_dim)
 
 
 
@@ -521,4 +554,22 @@ class RelativePoseSelfAttentionCamWeighter(nn.Module):
 
 
 
+def create_cam_weighting_object(method_name):
+    """
+    returns the camera weighting object based on the method name
+    """
 
+    if "attention" in method_name:
+        if method_name == "cross_attention":
+            return CrossAttentionCamWeighter(learned_attention = False)
+
+        elif method_name == "learned_cross_attention":
+            return CrossAttentionCamWeighter(learned_attention = True)
+
+        elif method_name == "relative_pose_self_attention":
+            return RelativePoseSelfAttentionCamWeighter()
+
+        else:
+            raise ValueError(f"attention based camera weighting algorithm {method_name} not implemented")
+    else:
+        return DeterministicCamWeighter(method_name)

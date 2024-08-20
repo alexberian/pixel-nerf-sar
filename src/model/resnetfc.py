@@ -5,7 +5,7 @@ import torch
 #  import torch_scatter
 import torch.autograd.profiler as profiler
 
-from .view_combine import get_combine_module
+from .cam_weighting import create_cam_weighting_object
 
 
 
@@ -78,9 +78,8 @@ class ResnetFC(nn.Module):
         d_hidden=128,
         beta=0.0,
         combine_layer=1000,
-        combine_type="average",
+        combine_type="baseline_mean",
         use_spade=False,
-        view_combiner_positional_encoder = None,
     ):
         """
         :param d_in input size
@@ -136,7 +135,7 @@ class ResnetFC(nn.Module):
         else:
             self.activation = nn.ReLU()
 
-        self.view_combiner = get_combine_module(self.combine_type , positional_encoder=view_combiner_positional_encoder)
+        self.camera_weighter = create_cam_weighting_object(combine_type)
 
     def forward(self, zx, combine_inner_dims=(1,), combine_index=None, dim_size=None, image_feature = None, src_poses = None, target_poses = None):
         """
@@ -178,14 +177,19 @@ class ResnetFC(nn.Module):
                     #  else:
 
                     # Combines the different processed views into a single tensor
-                    x = self.view_combiner(
-                        x,
-                        combine_inner_dims,
-                        combine_type = self.combine_type,
-                        imag_feature = image_feature,
-                        src_poses    = src_poses,
-                        target_poses = target_poses,
-                    )
+                    # x.shape = (SB*NS*B'*K, H)
+                    weights = self.camera_weighter(
+                        src_poses = src_poses, # (SB, NS, 4, 4)
+                        target_poses = target_poses, # (SB, B', K, H)
+                        image_feature = image_feature,
+                    ) # (SB, NS, B')
+                    H = x.shape[-1]
+                    SB = x.shape[0]
+                    x = x.reshape(*weights.shape, -1) # (SB, NS, B', K*H)
+                    weights = weights.reshape(*weights.shape, -1) # (SB, NS, B', 1)
+                    x *= weights # (SB, NS, B', K*H)
+                    x = x.sum(dim=1) # (SB, B', K*H)
+                    x = x.reshape(SB, -1, H) # (SB, B'*K, H)
 
                 if self.d_latent > 0 and blkid < self.combine_layer:
                     tz = self.lin_z[blkid](z)
