@@ -2,12 +2,10 @@
 if test -f /workspace/berian/public/miniconda3/envs/genvs/bin/python; then
 	PYTHONSTR="/workspace/berian/public/miniconda3/envs/genvs/bin/python"
 	DATASTR="/workspace/data/srncars/cars"
-	GPUSTR="6"
 fi
 if test -f /home/berian/miniconda3/envs/seed/bin/python; then
 	PYTHONSTR="/home/berian/miniconda3/envs/seed/bin/python"
 	DATASTR="/home/berian/Documents/shapenet/cars"
-	GPUSTR="0"
 fi
 
 $PYTHONSTR  \
