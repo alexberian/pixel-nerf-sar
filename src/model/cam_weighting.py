@@ -492,7 +492,7 @@ class RelativePoseSelfAttentionCamWeighter(nn.Module):
     """
     Uses self attention on the relative poses using pytorch's multihead attention.
     """
-    def __init__(self, num_heads = 4, embedder=PrincipalRayCameraEmbedder(num_linear_layers=2), **kwargs):
+    def __init__(self, num_heads = 4, embedder=SimpleMLPEmbedder(num_linear_layers=2), **kwargs):
         super().__init__(**kwargs)
 
         self.embedder = embedder

@@ -48,7 +48,7 @@ class Trainer:
         if args.only_train_view_combiner:
             trained_params = []
             for name, param in net.named_parameters():
-                if "view_combiner" in name:
+                if "camera_weighter" in name:
                     trained_params.append(param)
         else:
             trained_params = net.parameters()

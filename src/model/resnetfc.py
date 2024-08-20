@@ -177,19 +177,8 @@ class ResnetFC(nn.Module):
                     #  else:
 
                     # Combines the different processed views into a single tensor
-                    # x.shape = (SB*NS*B'*K, H)
-                    weights = self.camera_weighter(
-                        src_poses = src_poses, # (SB, NS, 4, 4)
-                        target_poses = target_poses, # (SB, B', K, H)
-                        image_feature = image_feature,
-                    ) # (SB, NS, B')
-                    H = x.shape[-1]
-                    SB = x.shape[0]
-                    x = x.reshape(*weights.shape, -1) # (SB, NS, B', K*H)
-                    weights = weights.reshape(*weights.shape, -1) # (SB, NS, B', 1)
-                    x *= weights # (SB, NS, B', K*H)
-                    x = x.sum(dim=1) # (SB, B', K*H)
-                    x = x.reshape(SB, -1, H) # (SB, B'*K, H)
+                    x = self.combine_views(x, src_poses, target_poses, image_feature)
+                    
 
                 if self.d_latent > 0 and blkid < self.combine_layer:
                     tz = self.lin_z[blkid](z)
@@ -204,6 +193,35 @@ class ResnetFC(nn.Module):
             out = self.lin_out(self.activation(x))
             return out
 
+    
+    def combine_views(
+        self, x, src_poses, target_poses, image_feature
+    ):
+        """
+        combines the latent space of the different views into a single tensor
+        """
+        # compute weights
+        weights = self.camera_weighter(
+            src_poses = src_poses, # (SB, NS, 4, 4)
+            target_poses = target_poses, # (SB, B', K, H)
+            image_feature = image_feature,
+        ) # (SB, NS, B')
+
+        # get shapes
+        H = x.shape[-1]
+        SB = weights.shape[0]
+
+        # reshape
+        x = x.reshape(*weights.shape, -1) # (SB, NS, B', K*H)
+        weights = weights.reshape(*weights.shape, -1) # (SB, NS, B', 1)
+
+        # apply weights
+        x *= weights # (SB, NS, B', K*H)
+        x = x.sum(dim=1) # (SB, B', K*H)
+
+        # reshape back and return
+        x = x.reshape(SB, -1, H) # (SB, B'*K, H)
+        return x
 
 
     @classmethod
