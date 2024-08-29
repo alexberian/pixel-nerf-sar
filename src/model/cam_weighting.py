@@ -398,23 +398,88 @@ class SimpleMLPEmbedder(nn.Module):
         self.embed_dim = embed_dim
 
 
-    def forward(self, camera_matrices):
+    def forward(self, pose_matrices):
         """
-        camera_matrices (..., 4, 4) camera matrices
+        pose_matrices (..., 4, 4) camera matrices
         returns embeddings (..., embed_dim) embeddings of the poses
         """
         # remove the last row of the camera matrices
-        shape_prefix = camera_matrices.shape[:-2] # the ... part of the shape
-        camera_matrices = camera_matrices[..., :3, :].reshape(-1, 12) # (B, 12)
+        shape_prefix = pose_matrices.shape[:-2] # the ... part of the shape
+        pose_matrices = pose_matrices[..., :3, :].reshape(-1, 12) # (B, 12)
 
         # calculate the embeddings
-        x = camera_matrices
+        x = pose_matrices
         for layer in self.linear_layers:
             x = layer(x)
             x = self.activation(x)
 
         # reshape and return
         return x.reshape(*shape_prefix, self.embed_dim)
+
+
+
+class RayMapEmbedder(SimpleMLPEmbedder):
+    """
+    Produces a grid of unit vector rays, and then uses a simple MLP to embed them.
+    """
+    def __init__(self, grid_size = 5, **kwargs):
+        super().__init__(**kwargs)
+
+        self.grid_size = grid_size
+        self.linear_layers[0] = nn.Linear(grid_size*grid_size*6, self.embed_dim)
+
+        pixel_coords = torch.meshgrid(
+            torch.linspace(-1, 1, self.grid_size),
+            torch.linspace(-1, 1, self.grid_size),
+        )
+        pixel_coords = torch.stack(pixel_coords).reshape(2, -1) # (2, G*G)
+        ones = torch.ones(2, grid_size*grid_size) # (2, G*G)
+        homo_pixel_coords = torch.cat([pixel_coords,ones],dim=0) # (4, G*G)
+        self.pixels = homo_pixel_coords.T # (G*G, 4)
+
+
+    def forward(self, pose_matrices, focal_length = 131.25):
+        """
+        pose_matrices (..., 4, 4) camera matrices
+        returns embeddings (..., embed_dim) embeddings of the poses
+        """
+        # remove the last row of the camera matrices
+        shape_prefix = pose_matrices.shape[:-2]
+        pose_matrices = pose_matrices.reshape(-1, 4, 4) # (B, 4, 4)
+
+        # calculate ray grid
+        cam_centers = pose_matrices[:, :3, 3] # (B, 3)
+        extrinsics = torch.inverse(pose_matrices) # (B, 4, 4)
+        intrinsics = torch.tensor(
+            [ [ focal_length, 0, 0, 0],
+              [ 0, focal_length, 0, 0],
+              [ 0, 0, 1, 0],
+              [ 0, 0, 0, 1] ],
+            dtype=pose_matrices.dtype, device=pose_matrices.device
+        )
+        camera_matrices = intrinsics @ extrinsics # (B, 4, 4)
+        pixels = self.pixels.to(device=camera_matrices.device)
+        points_in_space = torch.inverse(camera_matrices).reshape(-1,1,4,4) @ \
+                          pixels.reshape(1,-1,4,1) # (B, G*G, 4, 1)
+        cam_centers = cam_centers.reshape(-1, 1, 3) # (B, 1, 3)
+        cam_centers = cam_centers.repeat(1, self.grid_size*self.grid_size, 1) # (B, G*G, 3)
+        points_in_space = points_in_space[..., :3, 0] # (B, G*G, 3)
+        ray_vectors = points_in_space - cam_centers # (B, G*G, 3)
+        ray_vectors = ray_vectors / torch.norm(ray_vectors, dim=-1, keepdim=True) # (B, G*G, 3)
+        ray_grid = torch.cat([cam_centers, ray_vectors], dim=-1) # (B, G*G, 6)
+
+        # pass through the MLP
+        x = ray_grid.reshape(ray_grid.shape[0],-1) # (B, G*G*6)
+        for layer in self.linear_layers:
+            x = layer(x)
+            x = self.activation(x)
+
+        # reshape and return
+        return x.reshape(*shape_prefix, self.embed_dim)
+
+        
+        
+
 
 
 
@@ -492,7 +557,7 @@ class RelativePoseSelfAttentionCamWeighter(nn.Module):
     """
     Uses self attention on the relative poses using pytorch's multihead attention.
     """
-    def __init__(self, num_heads = 4, embedder=SimpleMLPEmbedder(num_linear_layers=2), **kwargs):
+    def __init__(self, num_heads = 4, embedder=RayMapEmbedder(), **kwargs):
         super().__init__(**kwargs)
 
         self.embedder = embedder
