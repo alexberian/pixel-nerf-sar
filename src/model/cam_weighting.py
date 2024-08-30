@@ -557,14 +557,16 @@ class RelativePoseSelfAttentionCamWeighter(nn.Module):
     """
     Uses self attention on the relative poses using pytorch's multihead attention.
     """
-    def __init__(self, num_heads = 4, embedder=RayMapEmbedder(), **kwargs):
+    def __init__(self, num_heads = 4, num_attention_steps = 3, embedder=RayMapEmbedder(), **kwargs):
         super().__init__(**kwargs)
 
         self.embedder = embedder
         self.attention_dim = self.embedder.embed_dim
         
         # initialize learned attention layers
-        self.multihead_attention = nn.MultiheadAttention(self.attention_dim, num_heads, batch_first=True)
+        self.attention_layers = nn.Sequential()
+        for i in range(num_attention_steps):
+            self.attention_layers.append(nn.MultiheadAttention(self.attention_dim, num_heads, batch_first=True))
         
         # initialize the weight calculation layers
         self.weight_calculation_subnet = nn.Sequential(
@@ -605,10 +607,11 @@ class RelativePoseSelfAttentionCamWeighter(nn.Module):
             # apply attention
             vectors = vectors.permute(0, 2, 1, 3) # (SB, B', NS, A)
             vectors = vectors.reshape(-1, NS, self.attention_dim) # (SB*B', NS, A)
-            vectors_with_attention = self.multihead_attention(vectors, vectors, vectors, need_weights = False)[0] # (SB*B', NS, A)
+            for multihead_attention in self.attention_layers:
+                vectors = multihead_attention(vectors, vectors, vectors, need_weights = False)[0] # (SB*B', NS, A)
 
             # calculate weights
-            weight  = self.weight_calculation_subnet(vectors_with_attention) # (SB*B', NS, 1)
+            weight  = self.weight_calculation_subnet(vectors) # (SB*B', NS, 1)
             weight = torch.softmax(weight, dim=1) # (SB*B', NS, 1)
 
             # reshape and return weights
