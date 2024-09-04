@@ -14,6 +14,6 @@ $PYTHONSTR  \
     --nviews='1 2 3' \
     --combine_type='relative_pose_self_attention' \
     --resume \
-    --only_train_view_combiner \
+    # --only_train_view_combiner \
     # --combine_type='average' \
 
