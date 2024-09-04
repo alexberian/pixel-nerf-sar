@@ -13,6 +13,7 @@ $PYTHONSTR  \
     -D $DATASTR --gpu_id='0' \
     --nviews='1 2 3' \
     --combine_type='relative_pose_self_attention' \
+    --lr='0.00001' \
     --resume \
     # --only_train_view_combiner \
     # --combine_type='average' \
